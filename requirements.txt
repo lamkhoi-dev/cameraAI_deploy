@@ -1,0 +1,19 @@
+# Web Framework & Database
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-socketio>=5.3.0
+flask-sqlalchemy>=3.0.0
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+python-socketio>=5.9.0
+
+# AI & Computer Vision
+torch==2.2.2
+torchvision==0.17.2
+opencv-python==4.10.0.84
+ultralytics>=8.1.0
+easyocr>=1.7.0
+sahi==0.11.36
+numpy>=1.24.0,<2.0.0
+requests>=2.31.0

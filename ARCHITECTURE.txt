@@ -1,0 +1,313 @@
+"""
+AI Detection System - Architecture & Components Overview
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    SYSTEM ARCHITECTURE                          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐
+│  YOLO Models │  Object Detection & Pose Estimation
+└──────┬───────┘
+       │
+       ▼
+┌─────────────────────┐
+│   main.py           │  Video Processing & Detection
+│  (YOLO Detection)   │  - Detect persons & vehicles
+└─────────┬───────────┘  - Analyze colors
+          │               - License plate recognition
+          │
+          ▼
+┌──────────────────────────┐
+│  db_integration.py       │  Data Upload Client
+│  (DetectionDataUploader) │  - HTTP requests with retry
+└─────────┬────────────────┘  - Error handling
+          │                    - Connection checks
+          │
+    HTTP API
+          │
+          ▼
+┌─────────────────────────────────────┐
+│        Flask Web Server (app.py)    │
+│                                      │
+│  ┌─────────────────────────────┐   │
+│  │  REST API Endpoints         │   │
+│  │  /api/persons               │   │
+│  │  /api/vehicles              │   │
+│  │  /api/alerts                │   │
+│  │  /api/statistics            │   │
+│  │  /health                    │   │
+│  └─────────────────────────────┘   │
+│                                      │
+│  ┌─────────────────────────────┐   │
+│  │  WebSocket (Real-time)      │   │
+│  │  - subscribe_persons        │   │
+│  │  - subscribe_vehicles       │   │
+│  │  - subscribe_alerts         │   │
+│  └─────────────────────────────┘   │
+└────────────┬────────────────────────┘
+             │
+             ▼
+    ┌──────────────────┐
+    │   PostgreSQL DB  │  Data Storage
+    │  ┌────────────┐  │  - persons table
+    │  │persons     │  │  - vehicles table
+    │  ├────────────┤  │  - alerts table
+    │  │vehicles    │  │
+    │  ├────────────┤  │  Features:
+    │  │alerts      │  │  - Indexes for fast search
+    │  └────────────┘  │  - JSON columns for colors
+    │                  │  - Foreign keys for alerts
+    └──────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    DATA FLOW EXAMPLE                            │
+└─────────────────────────────────────────────────────────────────┘
+
+1. DETECTION PHASE (main.py)
+   ├─ Read video frame
+   ├─ Run YOLO pose detection
+   ├─ Run YOLO object detection
+   ├─ Extract person/vehicle
+   ├─ Analyze colors
+   ├─ Recognize license plate
+   └─ Save crop image
+
+2. UPLOAD PHASE (db_integration.py)
+   ├─ Check API health
+   ├─ Prepare JSON data
+   ├─ HTTP POST to API
+   ├─ Handle retry on failure
+   └─ Log result
+
+3. STORAGE PHASE (Flask + PostgreSQL)
+   ├─ Validate input data
+   ├─ Check existing record
+   ├─ Insert or update in DB
+   ├─ Broadcast WebSocket event
+   └─ Return JSON response
+
+4. QUERY PHASE (REST API)
+   ├─ Build SQL query with filters
+   ├─ Apply indexes for performance
+   ├─ Paginate results
+   ├─ Convert to JSON
+   └─ Return to client
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    FILE ORGANIZATION                            │
+└─────────────────────────────────────────────────────────────────┘
+
+DATABASE & ORM:
+├─ models.py             → SQLAlchemy models (Person, Vehicle, Alert)
+├─ init_db.py            → Database initialization script
+├─ config.py             → Configuration settings
+└─ .env                  → Environment variables
+
+API SERVER:
+├─ app.py                → Flask main application
+│  ├─ CRUD endpoints
+│  ├─ Search & filter
+│  ├─ WebSocket events
+│  └─ Statistics
+└─ requirements.txt      → Python dependencies
+
+CLIENT INTEGRATION:
+├─ db_integration.py     → API client library
+├─ client_example.py     → Usage examples
+├─ INTEGRATION_GUIDE.py  → Integration instructions
+└─ QUICKSTART.md         → Quick start guide
+
+VIDEO PROCESSING:
+├─ main.py               → YOLO detection (your existing code)
+├─ yolov8n-pose.pt       → Pose detection model
+├─ yolov8n.pt            → Object detection model
+└─ cropped_data/         → Output images
+
+DOCUMENTATION:
+├─ README.md             → Full documentation
+└─ ARCHITECTURE.txt      → This file
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    API RESPONSE EXAMPLES                        │
+└─────────────────────────────────────────────────────────────────┘
+
+CREATE PERSON:
+POST /api/persons
+{
+  "person_id": "person_001",
+  "location": "Camera 1",
+  "shirt_colors": [
+    {"rank": 1, "name": "Trắng", "rgb": [255, 255, 255]}
+  ],
+  "pants_colors": [
+    {"rank": 1, "name": "Xanh đen", "rgb": [0, 51, 102]}
+  ],
+  "hair_colors": [
+    {"rank": 1, "name": "Đen", "rgb": [0, 0, 0]}
+  ],
+  "confidence": 0.95
+}
+
+Response (201 Created):
+{
+  "id": 1,
+  "person_id": "person_001",
+  "location": "Camera 1",
+  "timestamp": "2024-01-15T10:30:00",
+  "image_path": "cropped_data/person_1/frame_001.jpg",
+  "shirt_colors": [...],
+  "confidence": 0.95,
+  "created_at": "2024-01-15T10:30:00",
+  "updated_at": "2024-01-15T10:30:00"
+}
+
+---
+
+LIST VEHICLES:
+GET /api/vehicles?vehicle_type=car&location=Camera&page=1&per_page=20
+
+Response (200 OK):
+{
+  "data": [
+    {
+      "id": 1,
+      "vehicle_id": "vehicle_001",
+      "vehicle_type": "car",
+      "license_plate": "29A-12345",
+      "location": "Camera 1",
+      "timestamp": "2024-01-15T10:30:00",
+      "confidence": 0.92,
+      "vehicle_colors": [...]
+    },
+    ...
+  ],
+  "total": 150,
+  "pages": 8,
+  "current_page": 1
+}
+
+---
+
+STATISTICS:
+GET /api/statistics
+
+Response (200 OK):
+{
+  "total_persons": 450,
+  "total_vehicles": 320,
+  "active_alerts": 5,
+  "total_alerts": 128,
+  "recent_persons": [...],
+  "recent_vehicles": [...],
+  "recent_alerts": [...]
+}
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    SEARCH CAPABILITIES                          │
+└─────────────────────────────────────────────────────────────────┘
+
+PERSONS SEARCH:
+- By location         : /api/persons?location=Camera%201
+- By time range       : /api/persons?start_time=2024-01-01T00:00:00&end_time=2024-01-02T00:00:00
+- Combination         : /api/persons?location=Camera&start_time=2024-01-01T00:00:00
+- Pagination          : /api/persons?page=2&per_page=50
+
+VEHICLES SEARCH:
+- By vehicle type     : /api/vehicles?vehicle_type=car
+- By license plate    : /api/vehicles?license_plate=29A
+- By location         : /api/vehicles?location=Zone%20A
+- By time range       : /api/vehicles?start_time=2024-01-01T00:00:00
+- Combination         : /api/vehicles?vehicle_type=motorcycle&location=Camera&start_time=2024-01-01T00:00:00
+
+ALERTS SEARCH:
+- By type             : /api/alerts?alert_type=fire
+- By status           : /api/alerts?status=active
+- By severity         : /api/alerts?severity=critical
+- Combination         : /api/alerts?alert_type=fire&status=active&severity=critical
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    PERFORMANCE CONSIDERATIONS                   │
+└─────────────────────────────────────────────────────────────────┘
+
+DATABASE INDEXES:
+- persons.person_id           (UNIQUE)
+- persons.timestamp           (for time-based queries)
+- persons.location            (for location searches)
+- vehicles.vehicle_id         (UNIQUE)
+- vehicles.vehicle_type       (for type filtering)
+- vehicles.license_plate      (for plate search)
+- vehicles.timestamp, location
+- alerts.alert_type, status, timestamp, severity
+
+OPTIMIZATION STRATEGIES:
+1. Pagination: Use page/per_page to avoid loading huge datasets
+2. Indexes: All search columns are indexed for O(log n) lookup
+3. Connection Pooling: SQLAlchemy manages DB connections
+4. Batch Operations: Group uploads to reduce API calls
+5. WebSocket: Real-time updates vs polling
+6. Caching: Optional caching layer for frequent queries
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    SECURITY FEATURES                            │
+└─────────────────────────────────────────────────────────────────┘
+
+Currently Implemented:
+- CORS enabled for cross-origin requests
+- Input validation on all endpoints
+- SQL injection prevention (SQLAlchemy ORM)
+- JSON response sanitization
+
+Optional (can be enabled via config.py):
+- JWT authentication
+- Rate limiting
+- HTTPS/SSL
+- API keys
+- User authentication/authorization
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEPLOYMENT OPTIONS                           │
+└─────────────────────────────────────────────────────────────────┘
+
+DEVELOPMENT:
+- Local PostgreSQL + Flask dev server
+- Perfect for testing & development
+
+PRODUCTION:
+1. Heroku    : git push heroku main
+2. AWS       : EC2 + RDS PostgreSQL
+3. Docker    : Docker + Docker Compose
+4. Linux     : Systemd service
+5. Cloud     : Google Cloud, Azure, DigitalOcean
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    NEXT STEPS                                   │
+└─────────────────────────────────────────────────────────────────┘
+
+1. ✅ Setup system (DONE)
+2. → Test with client_example.py
+3. → Integrate with main.py (see INTEGRATION_GUIDE.py)
+4. → Monitor logs & performance
+5. → Add web dashboard UI
+6. → Deploy to production
+7. → Setup monitoring & alerts
+
+
+For detailed documentation, see:
+- README.md            - Full guide
+- QUICKSTART.md        - 5-minute setup
+- INTEGRATION_GUIDE.py - Integration steps
+- client_example.py    - Code examples
+"""
+
+print(__doc__)
+
+if __name__ == '__main__':
+    print("\nArchitecture documentation generated.")

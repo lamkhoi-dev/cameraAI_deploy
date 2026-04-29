@@ -1,0 +1,5 @@
+=== CẢNH BÁO CHÁY ===
+Frame: 127
+Loại: KHÓI (59.7%)
+Lửa: False (0.05%)
+Khói: True (59.71%)
