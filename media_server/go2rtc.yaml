@@ -1,0 +1,38 @@
+# go2rtc Configuration — Auto-generated
+# DO NOT commit this file (contains camera credentials)
+# Template: go2rtc.yaml.example
+
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"
+
+streams:
+  # ============================================
+  # Batch 1 — 10 cameras (default onboard)
+  # ============================================
+
+  # --- Hikvision cameras (admin/abcd1357) ---
+  cam_01:  # Sanh A
+    - rtsp://admin:abcd1357@192.168.1.127:554/Streaming/Channels/101
+  cam_02:  # Sanh B
+    - rtsp://admin:abcd1357@192.168.1.207:554/Streaming/Channels/101
+  cam_05:  # Duong Tu do
+    - rtsp://admin:abcd1357@192.168.1.4:554/Streaming/Channels/101
+  cam_11:  # B2 nhin doc T1 xuong ham
+    - rtsp://admin:abcd1357@192.168.1.201:554/Streaming/Channels/101
+  cam_16:  # San vuon
+    - rtsp://admin:abcd1357@192.168.1.128:554/Streaming/Channels/101
+  cam_21:  # Thang may cu dan 1
+    - rtsp://admin:abcd1357@192.168.1.234:554/Streaming/Channels/101
+
+  # --- Pana+Dahua cameras (admin/admin) ---
+  cam_07:  # Sanh van phong
+    - rtsp://admin:admin@192.168.1.31:554/cam/realmonitor?channel=1&subtype=0
+  cam_10:  # Nhin loi ra sanh C
+    - rtsp://admin:admin@192.168.1.33:554/cam/realmonitor?channel=1&subtype=0
+  cam_12:  # Cua BQL nhin cua TM B2
+    - rtsp://admin:admin@192.168.1.192:554/cam/realmonitor?channel=1&subtype=0
+  cam_20:  # Sac pin Lithium
+    - rtsp://admin:admin@192.168.1.2:554/cam/realmonitor?channel=1&subtype=0
