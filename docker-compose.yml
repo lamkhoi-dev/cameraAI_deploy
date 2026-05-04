@@ -1,0 +1,245 @@
+version: '3.8'
+
+# Docker Compose for Camera Tracking AI Engine
+# Production deployment configuration
+#
+# Usage:
+#   docker-compose up -d          # Start in background
+#   docker-compose logs -f        # View logs
+#   docker-compose down          # Stop and remove
+
+services:
+  # AI Engine - Main inference service
+  ai-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: camera-ai:v1.0
+    container_name: camera-tracking-ai
+    
+    # GPU support
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0  # Use GPU device 0
+    
+    # Environment variables
+    env_file: .env
+    environment:
+      # Override defaults if needed
+      VIDEO_SOURCE: "rtsp://go2rtc:8554/camera1"
+      BACKEND_API_URL: "http://backend:8000"
+      API_KEY: "${API_KEY}"
+      LOG_LEVEL: "INFO"
+    
+    # Volumes
+    volumes:
+      - ./ai_engine/models:/app/ai_engine/models              # Model persistence
+      - ./cropped_data:/app/cropped_data                      # Output crops
+      - ./logs:/app/logs                                      # Log files
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw                      # Display (optional)
+    
+    # Network
+    networks:
+      - camera-network
+    
+    # Resource limits (Tesla P4)
+    deploy:
+      resources:
+        limits:
+          cpus: '8'                    # 8 CPU cores
+          memory: 8G                   # 8GB RAM
+          devices:
+            - driver: nvidia
+              count: 1                 # 1 GPU
+              capabilities: [gpu]
+        reservations:
+          memory: 6G                   # Reserve 6GB
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "-c", "from ultralytics import YOLO; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    
+    # Dependencies
+    depends_on:
+      go2rtc:
+        condition: service_healthy
+    
+    # Ports (optional, for debugging)
+    ports:
+      - "8001:8001"  # If adding API endpoint
+
+  # go2rtc - Camera streaming & RTSP server
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: go2rtc-server
+    
+    networks:
+      - camera-network
+    
+    ports:
+      - "8554:8554/tcp"  # RTSP
+      - "8554:8554/udp"  # RTP
+      - "1984:1984/tcp"  # HTTP API
+    
+    environment:
+      - GO2RTC_RTSP_LISTEN=:8554
+      - GO2RTC_HTTP_LISTEN=:1984
+      - TZ=Asia/Ho_Chi_Minh
+    
+    volumes:
+      - ./go2rtc.yaml:/app/go2rtc.yaml:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1984/api/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    restart: unless-stopped
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Backend API (optional, replace with your backend service)
+  backend:
+    image: your-backend:latest
+    container_name: camera-backend-api
+    
+    networks:
+      - camera-network
+    
+    ports:
+      - "8000:8000"
+    
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - API_KEY=${API_KEY}
+    
+    volumes:
+      - ./backend_config:/app/config:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    restart: unless-stopped
+    
+    depends_on:
+      - postgres
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: camera-postgres
+    
+    networks:
+      - camera-network
+    
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=Asia/Ho_Chi_Minh
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    restart: unless-stopped
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Monitoring (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: camera-prometheus
+    
+    networks:
+      - camera-network
+    
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    
+    restart: unless-stopped
+    
+    depends_on:
+      - ai-engine
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# Networks
+networks:
+  camera-network:
+    driver: bridge
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+
+# Environment file (.env)
+# Copy and configure:
+#   cp .env.example .env
+#   # Edit with your settings
+#
+# Example .env:
+#   BACKEND_API_URL=http://localhost:8000
+#   API_KEY=your-secret-api-key
+#   VIDEO_SOURCE=rtsp://localhost:8554/camera1
+#   DATABASE_URL=postgresql://user:password@postgres:5432/camera_db
+#   POSTGRES_DB=camera_db
+#   POSTGRES_USER=postgres
+#   POSTGRES_PASSWORD=secure-password
+#   LOG_LEVEL=INFO

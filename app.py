@@ -8,6 +8,13 @@ from sqlalchemy import and_, or_, desc
 import os
 from dotenv import load_dotenv
 
+# Face recognition (Phase 2)
+try:
+    from ai_engine.utils.face_matcher import get_face_matching_engine
+    FACE_MATCHING_AVAILABLE = True
+except ImportError:
+    FACE_MATCHING_AVAILABLE = False
+
 load_dotenv()
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -52,6 +59,12 @@ def subscribe_alerts():
     join_room('alerts')
     emit('response', {'status': 'subscribed', 'channel': 'alerts'})
 
+@socketio.on('subscribe_faces')
+def subscribe_faces():
+    """Subscribe to real-time face detection (Phase 2)"""
+    join_room('faces')
+    emit('response', {'status': 'subscribed', 'channel': 'faces'})
+
 # ===== HELPER FUNCTIONS =====
 
 def broadcast_new_person(person_data):
@@ -69,6 +82,10 @@ def broadcast_new_alert(alert_data):
 def broadcast_new_camera(camera_data):
     """Phát sóng camera mới"""
     socketio.emit('new_camera', camera_data, room='cameras')
+
+def broadcast_new_face(face_data):
+    """Phát sóng dữ liệu khuôn mặt mới (Phase 2)"""
+    socketio.emit('new_face', face_data, room='faces')
 
 # ===== API ENDPOINTS - CAMERAS =====
 
@@ -827,6 +844,436 @@ def get_statistics():
             'recent_alerts': [a.to_dict() for a in stats['recent_alerts']]
         }), 200
     
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ===== API ENDPOINTS - FACE RECOGNITION (Phase 2) =====
+
+@app.route('/api/ai/faces', methods=['POST'])
+def receive_face_data():
+    """
+    Receive face detection data from AI engine
+    Includes face embeddings and matching results
+    """
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        data = request.get_json()
+        
+        camera_id = data.get('camera_id')
+        frame_idx = data.get('frame_index')
+        person_id = data.get('person_id')
+        faces = data.get('faces', [])
+        matched_person = data.get('matched_person')
+        
+        if not all([camera_id, person_id, faces]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Get face matcher
+        face_matcher = get_face_matching_engine()
+        
+        # Process each face
+        for face_data in faces:
+            embedding = face_data.get('embedding')
+            
+            if embedding:
+                # Try to match with known faces
+                match = face_matcher.find_matching_face(embedding)
+                
+                # Update person record with face embedding
+                person = Person.query.filter_by(person_id=person_id).first()
+                if person:
+                    person.face_embedding = embedding
+                    person.face_confidence = face_data.get('confidence', 0.0)
+                    person.face_bbox = face_data.get('bbox')
+                    person.face_embedding_model = "buffalo_l"
+                    
+                    # Update if matched
+                    if match:
+                        person.notes = f"FaceID Match: {match['person_id']} ({match['similarity']:.1%})"
+                    
+                    db.session.commit()
+        
+        # Broadcast to connected clients
+        broadcast_new_face({
+            'camera_id': camera_id,
+            'frame_index': frame_idx,
+            'person_id': person_id,
+            'face_count': len(faces),
+            'matched_person': matched_person,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        
+        return jsonify({
+            'status': 'received',
+            'faces_processed': len(faces),
+            'matched': matched_person is not None
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/known', methods=['GET'])
+def get_known_faces():
+    """Get all known faces (registered people for FaceID matching)"""
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        face_matcher = get_face_matching_engine()
+        known_faces = face_matcher.get_known_faces()
+        
+        return jsonify({
+            'total': len(known_faces),
+            'faces': {
+                person_id: {
+                    'metadata': face_data['metadata'],
+                    'added_at': face_data['added_at'],
+                    'match_count': face_data['match_count']
+                }
+                for person_id, face_data in known_faces.items()
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/known', methods=['POST'])
+def register_known_face():
+    """Register a known face for FaceID matching"""
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        data = request.get_json()
+        
+        person_id = data.get('person_id')
+        embedding = data.get('embedding')
+        metadata = data.get('metadata', {})
+        
+        if not all([person_id, embedding]):
+            return jsonify({'error': 'person_id and embedding are required'}), 400
+        
+        if len(embedding) != 512:
+            return jsonify({'error': 'Embedding must be 512-dimensional'}), 400
+        
+        face_matcher = get_face_matching_engine()
+        success = face_matcher.add_known_face(person_id, embedding, metadata)
+        
+        if success:
+            return jsonify({
+                'status': 'registered',
+                'person_id': person_id
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to register face'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/match', methods=['POST'])
+def match_face():
+    """Find matching known face for a query embedding"""
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        data = request.get_json()
+        
+        embedding = data.get('embedding')
+        
+        if not embedding or len(embedding) != 512:
+            return jsonify({'error': 'Valid 512-dimensional embedding required'}), 400
+        
+        face_matcher = get_face_matching_engine()
+        match = face_matcher.find_matching_face(embedding)
+        
+        if match:
+            return jsonify({
+                'status': 'matched',
+                'person_id': match['person_id'],
+                'similarity': match['similarity'],
+                'metadata': match['metadata']
+            }), 200
+        else:
+            return jsonify({
+                'status': 'no_match',
+                'message': 'No matching known face found'
+            }), 200
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/stats', methods=['GET'])
+def get_face_stats():
+    """Get face matching statistics"""
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        face_matcher = get_face_matching_engine()
+        stats = face_matcher.get_stats()
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/known/<person_id>', methods=['DELETE'])
+def remove_known_face(person_id):
+    """Remove a known face from database"""
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        face_matcher = get_face_matching_engine()
+        success = face_matcher.remove_known_face(person_id)
+        
+        if success:
+            return jsonify({
+                'status': 'removed',
+                'person_id': person_id
+            }), 200
+        else:
+            return jsonify({'error': f'Known face not found: {person_id}'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/register-image', methods=['POST'])
+def register_face_from_image():
+    """
+    Register a known face from image file
+    Extracts face embedding and stores it
+    """
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        # Check if file is in request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        person_id = request.form.get('person_id')
+        metadata_str = request.form.get('metadata', '{}')
+        
+        if not person_id:
+            return jsonify({'error': 'person_id is required'}), 400
+        
+        # Get image file
+        image_file = request.files['image']
+        if image_file.filename == '':
+            return jsonify({'error': 'No image file selected'}), 400
+        
+        # Read image
+        import numpy as np
+        from PIL import Image
+        import io
+        
+        try:
+            img_pil = Image.open(io.BytesIO(image_file.read()))
+            img_cv2 = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            return jsonify({'error': f'Failed to read image: {str(e)}'}), 400
+        
+        # Extract face embedding using face processor
+        try:
+            from ai_engine.processors.face_processor import FaceProcessor
+            
+            face_processor = FaceProcessor()
+            if not face_processor.load_model():
+                return jsonify({'error': 'Face recognition model not available'}), 501
+            
+            # Extract embedding
+            embedding = face_processor.extract_embedding(img_cv2)
+            
+            if not embedding:
+                return jsonify({'error': 'No face detected in image'}), 400
+            
+            # Parse metadata
+            import json
+            try:
+                metadata = json.loads(metadata_str) if metadata_str else {}
+            except:
+                metadata = {}
+            
+            # Register the face
+            face_matcher = get_face_matching_engine()
+            success = face_matcher.add_known_face(person_id, embedding, metadata)
+            
+            if success:
+                return jsonify({
+                    'status': 'registered',
+                    'person_id': person_id,
+                    'embedding_dim': len(embedding),
+                    'metadata': metadata
+                }), 201
+            else:
+                return jsonify({'error': 'Failed to register face'}), 500
+                
+        except ImportError:
+            return jsonify({'error': 'Face recognition dependencies not installed'}), 501
+        except Exception as e:
+            return jsonify({'error': f'Embedding extraction failed: {str(e)}'}), 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/search-image', methods=['POST'])
+def search_face_from_image():
+    """
+    Search for matching person from image file
+    Extracts face embedding and finds closest match
+    """
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        # Check if file is in request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        image_file = request.files['image']
+        if image_file.filename == '':
+            return jsonify({'error': 'No image file selected'}), 400
+        
+        # Read image
+        import numpy as np
+        from PIL import Image
+        import io
+        
+        try:
+            img_pil = Image.open(io.BytesIO(image_file.read()))
+            img_cv2 = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            return jsonify({'error': f'Failed to read image: {str(e)}'}), 400
+        
+        # Extract face embedding using face processor
+        try:
+            from ai_engine.processors.face_processor import FaceProcessor
+            
+            face_processor = FaceProcessor()
+            if not face_processor.load_model():
+                return jsonify({'error': 'Face recognition model not available'}), 501
+            
+            # Extract embedding
+            embedding = face_processor.extract_embedding(img_cv2)
+            
+            if not embedding:
+                return jsonify({'error': 'No face detected in image'}), 400
+            
+            # Find matching face
+            face_matcher = get_face_matching_engine()
+            match = face_matcher.find_matching_face(embedding)
+            
+            if match:
+                return jsonify({
+                    'status': 'matched',
+                    'person_id': match['person_id'],
+                    'similarity': match['similarity'],
+                    'confidence_percent': round(match['similarity'] * 100, 2),
+                    'metadata': match['metadata'],
+                    'added_at': match['added_at']
+                }), 200
+            else:
+                return jsonify({
+                    'status': 'no_match',
+                    'message': 'No matching face found in database'
+                }), 200
+                
+        except ImportError:
+            return jsonify({'error': 'Face recognition dependencies not installed'}), 501
+        except Exception as e:
+            return jsonify({'error': f'Search failed: {str(e)}'}), 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/persons-with-faces', methods=['GET'])
+def get_persons_with_faces():
+    """Get all persons that have registered face embeddings"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        # Query persons with face embeddings
+        query = Person.query.filter(Person.face_embedding != None)
+        query = query.order_by(desc(Person.updated_at))
+        
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        return jsonify({
+            'data': [p.to_dict() for p in paginated.items],
+            'total': paginated.total,
+            'pages': paginated.pages,
+            'current_page': page
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/person/<person_id>/history', methods=['GET'])
+def get_person_face_history(person_id):
+    """Get face detection history for a specific person"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+        # Get person with face embedding
+        person = Person.query.filter_by(person_id=person_id).first()
+        
+        if not person:
+            return jsonify({'error': 'Person not found'}), 404
+        
+        if not person.face_embedding:
+            return jsonify({'error': 'Person has no registered face'}), 404
+        
+        # Get all detections of this person
+        query = Person.query.filter_by(person_id=person_id).order_by(desc(Person.timestamp))
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        return jsonify({
+            'person_id': person_id,
+            'person_info': person.to_dict(),
+            'detection_history': [p.to_dict() for p in paginated.items],
+            'total_detections': paginated.total,
+            'pages': paginated.pages,
+            'current_page': page
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/faces/clear-all', methods=['POST'])
+def clear_all_known_faces():
+    """
+    Clear all known faces from database (WARNING: Use with caution)
+    Requires confirmation parameter
+    """
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        # Require explicit confirmation
+        confirm = request.get_json().get('confirm_clear_all')
+        
+        if not confirm:
+            return jsonify({
+                'error': 'This action will delete all known faces. Pass {"confirm_clear_all": true} to proceed'
+            }), 400
+        
+        face_matcher = get_face_matching_engine()
+        success = face_matcher.clear_all_faces()
+        
+        if success:
+            return jsonify({
+                'status': 'cleared',
+                'message': 'All known faces have been cleared'
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to clear faces'}), 500
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
