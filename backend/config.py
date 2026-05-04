@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Server
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 8001
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
