@@ -2,6 +2,7 @@
 venv/
 env/
 ENV/
+.venv/
 
 # Python
 __pycache__/
@@ -36,7 +37,34 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.pyc
+# Environment files (NEVER commit credentials)
 .env
 .env.local
+.env.production
+.env.*.local
+
+# Node.js / Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Docker
+*.log
+
+# Model weights (large files)
+*.pt
+*.engine
+*.onnx
+
+# Media / Uploads
+cropped_data/
+uploads/
+snapshots/
+
+# go2rtc (auto-generated, contains credentials)
+media_server/go2rtc.yaml
+
+# Video files
+*.mov
+*.mp4
+*.avi
