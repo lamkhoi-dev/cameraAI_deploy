@@ -1,5 +1,4 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   MonitorPlay,
@@ -7,7 +6,6 @@ import {
   ShieldAlert,
   History,
   Settings,
-  LogOut,
   Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +20,6 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
   const location = useLocation();
 
   return (
@@ -73,28 +70,16 @@ export function Sidebar() {
         })}
       </div>
 
-      {/* User Profile */}
+      {/* User Profile — Static (no auth) */}
       <div className="mt-auto pt-4 border-t border-zinc-800">
-        <div className="flex items-center justify-between px-2 py-2 hover:bg-zinc-900 rounded-lg cursor-pointer transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-zinc-800 border border-zinc-700 rounded-lg flex items-center justify-center">
-              <span className="text-zinc-400 text-xs font-bold">
-                {user?.username?.charAt(0).toUpperCase() || "A"}
-              </span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-zinc-200">
-                {user?.username || "admin"}
-              </span>
-              <span className="text-[12px] text-zinc-500">Quản trị viên</span>
-            </div>
+        <div className="flex items-center gap-3 px-2 py-2">
+          <div className="w-8 h-8 bg-zinc-800 border border-zinc-700 rounded-lg flex items-center justify-center">
+            <span className="text-zinc-400 text-xs font-bold">A</span>
           </div>
-          <button
-            onClick={logout}
-            className="text-zinc-500 hover:text-red-400 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-zinc-200">Admin</span>
+            <span className="text-[12px] text-zinc-500">Quản trị viên</span>
+          </div>
         </div>
       </div>
     </nav>

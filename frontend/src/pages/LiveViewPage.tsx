@@ -5,37 +5,43 @@ import api from "@/api/client";
 
 const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "http://localhost:1984";
 
-interface Camera {
+interface BackendCamera {
   id: number;
+  camera_id: string;
   name: string;
   location: string;
-  status: string;
-  stream_id: string;
-  ai_features: string[];
+  stream_url: string;
+  is_active: boolean;
+  last_connection_status: string;
+  enable_detection: boolean;
+  resolution: string | null;
+  fps: number;
 }
 
 type Layout = "2x2" | "3x3" | "4x4";
 
+const getStatus = (cam: BackendCamera): "online" | "offline" =>
+  cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
+
+const getAiTags = (cam: BackendCamera): string[] =>
+  cam.enable_detection ? ["AI Active"] : [];
+
 export default function LiveViewPage() {
-  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [cameras, setCameras] = useState<BackendCamera[]>([]);
   const [layout, setLayout] = useState<Layout>("3x3");
-  const [expandedCam, setExpandedCam] = useState<Camera | null>(null);
+  const [expandedCam, setExpandedCam] = useState<BackendCamera | null>(null);
 
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      setCameras(res.data);
+      const list = res.data.data || res.data;
+      setCameras(Array.isArray(list) ? list : []);
     } catch {
       setCameras([
-        { id: 1, name: "Sảnh A / Tầng 1", location: "Sảnh A", status: "online", stream_id: "cam_01", ai_features: ["Người"] },
-        { id: 2, name: "Bãi xe B1", location: "Bãi xe", status: "online", stream_id: "cam_02", ai_features: ["Xe"] },
-        { id: 3, name: "Hành lang C", location: "Hành lang", status: "online", stream_id: "cam_03", ai_features: [] },
-        { id: 4, name: "Kho Hàng / Tầng 2", location: "Kho hàng", status: "offline", stream_id: "cam_04", ai_features: [] },
-        { id: 5, name: "Cổng chính", location: "Cổng", status: "online", stream_id: "cam_05", ai_features: ["Người", "Xe"] },
-        { id: 6, name: "Tầng 3 / Văn phòng", location: "Tầng 3", status: "online", stream_id: "cam_06", ai_features: [] },
-        { id: 7, name: "Sân sau", location: "Sân sau", status: "online", stream_id: "cam_07", ai_features: [] },
-        { id: 8, name: "Thang máy A", location: "Thang máy", status: "online", stream_id: "cam_08", ai_features: ["Người"] },
-        { id: 9, name: "Phòng server", location: "Server", status: "online", stream_id: "cam_09", ai_features: [] },
+        { id: 1, camera_id: "cam_01", name: "Sảnh A / Tầng 1", location: "Sảnh A", stream_url: "rtsp://localhost:8554/cam_01", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
+        { id: 2, camera_id: "cam_02", name: "Bãi xe B1", location: "Bãi xe", stream_url: "rtsp://localhost:8554/cam_02", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
+        { id: 3, camera_id: "cam_03", name: "Hành lang C", location: "Hành lang", stream_url: "rtsp://localhost:8554/cam_03", is_active: true, last_connection_status: "disconnected", enable_detection: false, resolution: "1920x1080", fps: 30 },
+        { id: 4, camera_id: "cam_04", name: "Kho Hàng / Tầng 2", location: "Kho hàng", stream_url: "rtsp://localhost:8554/cam_04", is_active: false, last_connection_status: "disconnected", enable_detection: false, resolution: null, fps: 30 },
       ]);
     }
   }, []);
@@ -54,17 +60,20 @@ export default function LiveViewPage() {
   const displayCameras = cameras.slice(0, max);
 
   if (expandedCam) {
+    const status = getStatus(expandedCam);
     return (
       <div className="flex gap-6 h-[calc(100vh-7rem)]">
         {/* Main Video */}
         <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden flex flex-col">
           <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className={`w-2 h-2 rounded-full ${status === "online" ? "bg-emerald-500" : "bg-zinc-600"}`} />
               <span className="text-sm font-semibold text-white">{expandedCam.name}</span>
-              <span className="bg-red-500/20 border border-red-500/50 text-red-500 text-[11px] font-medium px-1.5 py-0.5 rounded-sm animate-pulse ml-2">
-                LIVE
-              </span>
+              {status === "online" && (
+                <span className="bg-red-500/20 border border-red-500/50 text-red-500 text-[11px] font-medium px-1.5 py-0.5 rounded-sm animate-pulse ml-2">
+                  LIVE
+                </span>
+              )}
             </div>
             <button
               onClick={() => setExpandedCam(null)}
@@ -75,7 +84,7 @@ export default function LiveViewPage() {
           </div>
           <div className="flex-1 bg-black relative">
             <iframe
-              src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.stream_id}&mode=webrtc`}
+              src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.camera_id}&mode=webrtc`}
               className="w-full h-full border-0"
               allow="autoplay; fullscreen"
               title={expandedCam.name}
@@ -86,25 +95,28 @@ export default function LiveViewPage() {
         {/* Right: Camera Thumbnails */}
         <div className="w-[280px] flex flex-col gap-2 overflow-y-auto">
           <h3 className="text-sm font-semibold text-zinc-300 mb-2">Danh sách camera</h3>
-          {cameras.map((cam) => (
-            <button
-              key={cam.id}
-              onClick={() => setExpandedCam(cam)}
-              className={`p-3 rounded-lg border text-left transition-colors ${
-                cam.id === expandedCam.id
-                  ? "bg-zinc-800 border-blue-500/50"
-                  : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={`w-2 h-2 rounded-full ${cam.status === "online" ? "bg-emerald-500" : "bg-zinc-600"}`}
-                />
-                <span className="text-sm text-zinc-200">{cam.name}</span>
-              </div>
-              <span className="text-[11px] text-zinc-500 mt-1 block">{cam.location}</span>
-            </button>
-          ))}
+          {cameras.map((cam) => {
+            const camStatus = getStatus(cam);
+            return (
+              <button
+                key={cam.camera_id}
+                onClick={() => setExpandedCam(cam)}
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  cam.camera_id === expandedCam.camera_id
+                    ? "bg-zinc-800 border-blue-500/50"
+                    : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${camStatus === "online" ? "bg-emerald-500" : "bg-zinc-600"}`}
+                  />
+                  <span className="text-sm text-zinc-200">{cam.name}</span>
+                </div>
+                <span className="text-[11px] text-zinc-500 mt-1 block">{cam.location}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -141,24 +153,27 @@ export default function LiveViewPage() {
 
       {/* Camera Grid */}
       <div className={`grid ${cols} gap-4 flex-1 overflow-y-auto`}>
-        {displayCameras.map((cam) => (
-          <div
-            key={cam.id}
-            onClick={() => cam.status === "online" && setExpandedCam(cam)}
-            className="cursor-pointer"
-          >
-            <CameraTile
-              name={cam.name}
-              status={cam.status as "online" | "offline"}
-              streamUrl={
-                cam.status === "online"
-                  ? `${GO2RTC_BASE}/stream.html?src=${cam.stream_id}&mode=webrtc`
-                  : undefined
-              }
-              aiTags={cam.ai_features}
-            />
-          </div>
-        ))}
+        {displayCameras.map((cam) => {
+          const camStatus = getStatus(cam);
+          return (
+            <div
+              key={cam.camera_id}
+              onClick={() => camStatus === "online" && setExpandedCam(cam)}
+              className="cursor-pointer"
+            >
+              <CameraTile
+                name={cam.name}
+                status={camStatus}
+                streamUrl={
+                  camStatus === "online"
+                    ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc`
+                    : undefined
+                }
+                aiTags={getAiTags(cam)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

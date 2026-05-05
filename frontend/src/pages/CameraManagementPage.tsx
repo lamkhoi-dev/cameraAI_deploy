@@ -43,45 +43,67 @@ import {
 } from "lucide-react";
 import api from "@/api/client";
 
-interface Camera {
+// Backend Camera model
+interface BackendCamera {
   id: number;
+  camera_id: string;
   name: string;
   location: string;
-  ip_address: string;
-  status: string;
-  brand: string;
-  stream_id: string;
-  rtsp_url: string;
-  ai_features: string[];
+  stream_url: string;
+  protocol: string;
+  resolution: string | null;
+  fps: number;
+  brand: string | null;
+  model: string | null;
+  is_active: boolean;
+  last_connection_status: string;
+  enable_detection: boolean;
+  username: string | null;
+  password: string | null;
+  notes: string | null;
+}
+
+// Extract IP from RTSP URL
+function extractIp(streamUrl: string): string {
+  try {
+    const match = streamUrl.match(/@([\d.]+)/);
+    if (match) return match[1];
+    const urlMatch = streamUrl.match(/:\/\/([\d.]+)/);
+    if (urlMatch) return urlMatch[1];
+  } catch { /* ignore */ }
+  return "—";
+}
+
+function getStatus(cam: BackendCamera): "online" | "offline" {
+  return cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
 }
 
 export default function CameraManagementPage() {
-  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [cameras, setCameras] = useState<BackendCamera[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
+  const [editingCamera, setEditingCamera] = useState<BackendCamera | null>(null);
   const [formData, setFormData] = useState({
+    camera_id: "",
     name: "",
     location: "",
-    ip_address: "",
-    rtsp_url: "",
+    stream_url: "",
     brand: "Hikvision",
-    ai_person: true,
-    ai_vehicle: true,
-    ai_fire: false,
+    enable_detection: true,
   });
 
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      setCameras(res.data);
+      const list = res.data.data || res.data;
+      setCameras(Array.isArray(list) ? list : []);
     } catch {
       setCameras([
-        { id: 1, name: "Sảnh A / Tầng 1", location: "Sảnh A", ip_address: "192.168.1.101", status: "online", brand: "Hikvision", stream_id: "cam_01", rtsp_url: "rtsp://admin:pass@192.168.1.101:554/stream1", ai_features: ["Người", "Xe"] },
-        { id: 2, name: "Bãi xe B1", location: "Bãi xe", ip_address: "192.168.1.102", status: "online", brand: "Dahua", stream_id: "cam_02", rtsp_url: "rtsp://admin:pass@192.168.1.102:554/stream1", ai_features: ["Xe"] },
-        { id: 3, name: "Hành lang C", location: "Hành lang", ip_address: "192.168.1.103", status: "online", brand: "Hikvision", stream_id: "cam_03", rtsp_url: "rtsp://admin:pass@192.168.1.103:554/stream1", ai_features: ["Người"] },
-        { id: 4, name: "Kho Hàng / Tầng 2", location: "Kho hàng", ip_address: "192.168.1.104", status: "offline", brand: "Other", stream_id: "cam_04", rtsp_url: "", ai_features: [] },
+        { id: 1, camera_id: "cam_01", name: "Sảnh A / Tầng 1", location: "Sảnh A", stream_url: "rtsp://admin:pass@192.168.1.101:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Hikvision", model: null, is_active: true, last_connection_status: "connected", enable_detection: true, username: null, password: null, notes: null },
+        { id: 2, camera_id: "cam_02", name: "Bãi xe B1", location: "Bãi xe", stream_url: "rtsp://admin:pass@192.168.1.102:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Dahua", model: null, is_active: true, last_connection_status: "connected", enable_detection: true, username: null, password: null, notes: null },
+        { id: 3, camera_id: "cam_03", name: "Hành lang C", location: "Hành lang", stream_url: "rtsp://admin:pass@192.168.1.103:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Hikvision", model: null, is_active: true, last_connection_status: "disconnected", enable_detection: true, username: null, password: null, notes: null },
+        { id: 4, camera_id: "cam_04", name: "Kho Hàng / Tầng 2", location: "Kho hàng", stream_url: "", protocol: "rtsp", resolution: null, fps: 30, brand: "Other", model: null, is_active: false, last_connection_status: "disconnected", enable_detection: false, username: null, password: null, notes: null },
       ]);
     }
   }, []);
@@ -91,49 +113,57 @@ export default function CameraManagementPage() {
   }, [fetchCameras]);
 
   const filtered = cameras.filter((cam) => {
+    const ip = extractIp(cam.stream_url);
     const matchSearch =
       cam.name.toLowerCase().includes(search.toLowerCase()) ||
-      cam.ip_address.includes(search);
-    const matchStatus = !statusFilter || statusFilter === "all" || cam.status === statusFilter;
+      ip.includes(search) ||
+      cam.camera_id.toLowerCase().includes(search.toLowerCase());
+    const status = getStatus(cam);
+    const matchStatus = !statusFilter || statusFilter === "all" || status === statusFilter;
     return matchSearch && matchStatus;
   });
 
   const openAddDialog = () => {
     setEditingCamera(null);
     setFormData({
+      camera_id: "",
       name: "",
       location: "",
-      ip_address: "",
-      rtsp_url: "",
+      stream_url: "",
       brand: "Hikvision",
-      ai_person: true,
-      ai_vehicle: true,
-      ai_fire: false,
+      enable_detection: true,
     });
     setDialogOpen(true);
   };
 
-  const openEditDialog = (cam: Camera) => {
+  const openEditDialog = (cam: BackendCamera) => {
     setEditingCamera(cam);
     setFormData({
+      camera_id: cam.camera_id,
       name: cam.name,
       location: cam.location,
-      ip_address: cam.ip_address,
-      rtsp_url: cam.rtsp_url,
-      brand: cam.brand,
-      ai_person: cam.ai_features.includes("Người"),
-      ai_vehicle: cam.ai_features.includes("Xe"),
-      ai_fire: cam.ai_features.includes("Lửa"),
+      stream_url: cam.stream_url,
+      brand: cam.brand || "Hikvision",
+      enable_detection: cam.enable_detection,
     });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     try {
+      const payload = {
+        camera_id: formData.camera_id,
+        name: formData.name,
+        location: formData.location,
+        stream_url: formData.stream_url,
+        brand: formData.brand,
+        enable_detection: formData.enable_detection,
+      };
+
       if (editingCamera) {
-        await api.put(`/cameras/${editingCamera.id}`, formData);
+        await api.put(`/cameras/${editingCamera.camera_id}`, payload);
       } else {
-        await api.post("/cameras", formData);
+        await api.post("/cameras", payload);
       }
       fetchCameras();
     } catch {
@@ -142,12 +172,12 @@ export default function CameraManagementPage() {
     setDialogOpen(false);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (cameraId: string) => {
     try {
-      await api.delete(`/cameras/${id}`);
+      await api.delete(`/cameras/${cameraId}`);
       fetchCameras();
     } catch {
-      setCameras((prev) => prev.filter((c) => c.id !== id));
+      setCameras((prev) => prev.filter((c) => c.camera_id !== cameraId));
     }
   };
 
@@ -194,6 +224,16 @@ export default function CameraManagementPage() {
             <div className="flex flex-col gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
+                  <Label className="text-zinc-300">Camera ID</Label>
+                  <Input
+                    value={formData.camera_id}
+                    onChange={(e) => setFormData((s) => ({ ...s, camera_id: e.target.value }))}
+                    className="bg-zinc-950 border-zinc-700 text-white"
+                    placeholder="cam_01"
+                    disabled={!!editingCamera}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
                   <Label className="text-zinc-300">Tên camera</Label>
                   <Input
                     value={formData.name}
@@ -202,6 +242,8 @@ export default function CameraManagementPage() {
                     placeholder="Sảnh A / Tầng 1"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <Label className="text-zinc-300">Vị trí</Label>
                   <Input
@@ -209,17 +251,6 @@ export default function CameraManagementPage() {
                     onChange={(e) => setFormData((s) => ({ ...s, location: e.target.value }))}
                     className="bg-zinc-950 border-zinc-700 text-white"
                     placeholder="Sảnh A"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label className="text-zinc-300">Địa chỉ IP</Label>
-                  <Input
-                    value={formData.ip_address}
-                    onChange={(e) => setFormData((s) => ({ ...s, ip_address: e.target.value }))}
-                    className="bg-zinc-950 border-zinc-700 text-white"
-                    placeholder="192.168.1.101"
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -240,39 +271,22 @@ export default function CameraManagementPage() {
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <Label className="text-zinc-300">RTSP URL</Label>
+                <Label className="text-zinc-300">Stream URL (RTSP)</Label>
                 <Input
-                  value={formData.rtsp_url}
-                  onChange={(e) => setFormData((s) => ({ ...s, rtsp_url: e.target.value }))}
+                  value={formData.stream_url}
+                  onChange={(e) => setFormData((s) => ({ ...s, stream_url: e.target.value }))}
                   className="bg-zinc-950 border-zinc-700 text-white"
                   placeholder="rtsp://admin:pass@192.168.1.101:554/stream1"
                 />
               </div>
-              {/* AI Feature Toggles */}
+              {/* AI Detection Toggle */}
               <div className="border-t border-zinc-800 pt-4">
-                <Label className="text-zinc-300 mb-3 block">AI Layers</Label>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-200">Nhận diện người</span>
-                    <Switch
-                      checked={formData.ai_person}
-                      onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_person: v }))}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-200">Nhận diện xe</span>
-                    <Switch
-                      checked={formData.ai_vehicle}
-                      onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_vehicle: v }))}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-200">Phát hiện lửa/khói</span>
-                    <Switch
-                      checked={formData.ai_fire}
-                      onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_fire: v }))}
-                    />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-zinc-200">Bật AI Detection</span>
+                  <Switch
+                    checked={formData.enable_detection}
+                    onCheckedChange={(v) => setFormData((s) => ({ ...s, enable_detection: v }))}
+                  />
                 </div>
               </div>
             </div>
@@ -304,71 +318,70 @@ export default function CameraManagementPage() {
               <TableHead className="text-zinc-400">Vị trí</TableHead>
               <TableHead className="text-zinc-400">IP</TableHead>
               <TableHead className="text-zinc-400">Trạng thái</TableHead>
-              <TableHead className="text-zinc-400">AI Layers</TableHead>
+              <TableHead className="text-zinc-400">AI Detection</TableHead>
               <TableHead className="text-zinc-400 text-right">Hành động</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((cam) => (
-              <TableRow key={cam.id} className="border-zinc-800 hover:bg-zinc-800/50">
-                <TableCell className="font-medium text-zinc-100">
-                  {cam.name}
-                </TableCell>
-                <TableCell className="text-zinc-400">{cam.location}</TableCell>
-                <TableCell className="text-zinc-400 font-mono text-sm">
-                  {cam.ip_address}
-                </TableCell>
-                <TableCell>
-                  {cam.status === "online" ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
-                      <Wifi className="h-3 w-3 mr-1" />
-                      Online
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="bg-zinc-800 text-zinc-500 border-zinc-700">
-                      <WifiOff className="h-3 w-3 mr-1" />
-                      Offline
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1.5">
-                    {cam.ai_features.map((f) => (
-                      <Badge
-                        key={f}
-                        variant="secondary"
-                        className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[11px]"
-                      >
-                        {f}
+            {filtered.map((cam) => {
+              const status = getStatus(cam);
+              return (
+                <TableRow key={cam.camera_id} className="border-zinc-800 hover:bg-zinc-800/50">
+                  <TableCell className="font-medium text-zinc-100">
+                    {cam.name}
+                  </TableCell>
+                  <TableCell className="text-zinc-400">{cam.location}</TableCell>
+                  <TableCell className="text-zinc-400 font-mono text-sm">
+                    {extractIp(cam.stream_url)}
+                  </TableCell>
+                  <TableCell>
+                    {status === "online" ? (
+                      <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                        <Wifi className="h-3 w-3 mr-1" />
+                        Online
                       </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium text-zinc-400 hover:text-white h-9 w-9">
-                      <MoreVertical className="h-4 w-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-zinc-900 border-zinc-800" align="end">
-                      <DropdownMenuItem
-                        onClick={() => openEditDialog(cam)}
-                        className="text-zinc-300 focus:bg-zinc-800 focus:text-white"
-                      >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Chỉnh sửa
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(cam.id)}
-                        className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Xóa
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                    ) : (
+                      <Badge variant="secondary" className="bg-zinc-800 text-zinc-500 border-zinc-700">
+                        <WifiOff className="h-3 w-3 mr-1" />
+                        Offline
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {cam.enable_detection ? (
+                      <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[11px]">
+                        AI Active
+                      </Badge>
+                    ) : (
+                      <span className="text-zinc-600 text-sm">Tắt</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium text-zinc-400 hover:text-white h-9 w-9">
+                        <MoreVertical className="h-4 w-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-zinc-900 border-zinc-800" align="end">
+                        <DropdownMenuItem
+                          onClick={() => openEditDialog(cam)}
+                          className="text-zinc-300 focus:bg-zinc-800 focus:text-white"
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Chỉnh sửa
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(cam.camera_id)}
+                          className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Xóa
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

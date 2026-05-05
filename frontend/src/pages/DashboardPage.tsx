@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { CameraTile } from "@/components/CameraTile";
@@ -15,28 +15,36 @@ import {
   Flame,
 } from "lucide-react";
 import api from "@/api/client";
+import { useSocket } from "@/hooks/useSocket";
 
 const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "http://localhost:1984";
 
-interface Camera {
+// Backend Camera model shape
+interface BackendCamera {
   id: number;
+  camera_id: string;
   name: string;
   location: string;
-  status: string;
-  stream_id: string;
-  ai_features: string[];
+  stream_url: string;
+  is_active: boolean;
+  last_connection_status: string;
+  enable_detection: boolean;
+  resolution: string | null;
+  fps: number;
 }
 
-// Demo alerts for initial render
-const demoAlerts: AlertItemData[] = [
-  { id: "1", type: "fire", title: "Phát hiện khói/lửa", source: "Cam 04 - Kho Hàng", time: "14:30" },
-  { id: "2", type: "intrusion", title: "Khu vực hạn chế", source: "Cam 01 - Sảnh A", time: "14:15" },
-  { id: "3", type: "info", title: "Hệ thống reboot", source: "Server 02", time: "12:00" },
-];
+interface Stats {
+  total_persons: number;
+  total_vehicles: number;
+  active_alerts: number;
+  total_alerts: number;
+  recent_alerts: AlertItemData[];
+}
 
 export default function DashboardPage() {
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [alerts] = useState<AlertItemData[]>(demoAlerts);
+  const [cameras, setCameras] = useState<BackendCamera[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [alerts, setAlerts] = useState<AlertItemData[]>([]);
   const [gridLayout, setGridLayout] = useState<"2x2" | "3x3">("2x2");
   const [aiModules, setAiModules] = useState({
     person: true,
@@ -44,26 +52,78 @@ export default function DashboardPage() {
     fire: false,
   });
 
+  // Socket.IO: real-time events
+  const socketEvents = useMemo(
+    () => ({
+      new_alert: (data: unknown) => {
+        const alert = data as AlertItemData;
+        setAlerts((prev) => [alert, ...prev].slice(0, 20));
+      },
+    }),
+    []
+  );
+
+  useSocket({
+    rooms: ["alerts", "persons", "vehicles"],
+    events: socketEvents,
+  });
+
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      setCameras(res.data);
+      // Backend returns paginated: { data: [...], total, pages }
+      const list = res.data.data || res.data;
+      setCameras(Array.isArray(list) ? list : []);
     } catch {
-      // Use demo data when API unavailable
       setCameras([
-        { id: 1, name: "Sảnh A / Tầng 1", location: "Sảnh A", status: "online", stream_id: "cam_01", ai_features: ["Người"] },
-        { id: 2, name: "Bãi xe B1", location: "Bãi xe", status: "online", stream_id: "cam_02", ai_features: ["Xe"] },
-        { id: 3, name: "Hành lang C", location: "Hành lang", status: "online", stream_id: "cam_03", ai_features: [] },
-        { id: 4, name: "Kho Hàng / Tầng 2", location: "Kho hàng", status: "offline", stream_id: "cam_04", ai_features: [] },
+        { id: 1, camera_id: "cam_01", name: "Sảnh A / Tầng 1", location: "Sảnh A", stream_url: "rtsp://localhost:8554/cam_01", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
+        { id: 2, camera_id: "cam_02", name: "Bãi xe B1", location: "Bãi xe", stream_url: "rtsp://localhost:8554/cam_02", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
+        { id: 3, camera_id: "cam_03", name: "Hành lang C", location: "Hành lang", stream_url: "rtsp://localhost:8554/cam_03", is_active: true, last_connection_status: "disconnected", enable_detection: false, resolution: "1920x1080", fps: 30 },
+        { id: 4, camera_id: "cam_04", name: "Kho Hàng / Tầng 2", location: "Kho hàng", stream_url: "rtsp://localhost:8554/cam_04", is_active: false, last_connection_status: "disconnected", enable_detection: false, resolution: null, fps: 30 },
+      ]);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api.get("/statistics");
+      setStats(res.data);
+      // Map recent_alerts to AlertItemData
+      if (res.data.recent_alerts) {
+        setAlerts(
+          res.data.recent_alerts.map((a: Record<string, string>) => ({
+            id: String(a.id),
+            type: a.alert_type === "fire" ? "fire" : a.severity === "high" ? "intrusion" : "info",
+            title: a.description || a.alert_type,
+            source: a.location || "Unknown",
+            time: a.timestamp ? new Date(a.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "",
+          }))
+        );
+      }
+    } catch {
+      // Demo stats when API unavailable
+      setStats({ total_persons: 247, total_vehicles: 183, active_alerts: 3, total_alerts: 15, recent_alerts: [] });
+      setAlerts([
+        { id: "1", type: "fire", title: "Phát hiện khói/lửa", source: "Cam 04 - Kho Hàng", time: "14:30" },
+        { id: "2", type: "intrusion", title: "Khu vực hạn chế", source: "Cam 01 - Sảnh A", time: "14:15" },
+        { id: "3", type: "info", title: "Hệ thống reboot", source: "Server 02", time: "12:00" },
       ]);
     }
   }, []);
 
   useEffect(() => {
     fetchCameras();
-  }, [fetchCameras]);
+    fetchStats();
+  }, [fetchCameras, fetchStats]);
 
-  const onlineCameras = cameras.filter((c) => c.status === "online").length;
+  // Map backend status to UI status
+  const getStatus = (cam: BackendCamera): "online" | "offline" =>
+    cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
+
+  const getAiTags = (cam: BackendCamera): string[] =>
+    cam.enable_detection ? ["AI Active"] : [];
+
+  const onlineCameras = cameras.filter((c) => getStatus(c) === "online").length;
   const cols = gridLayout === "2x2" ? "grid-cols-2" : "grid-cols-3";
   const displayCameras = gridLayout === "2x2" ? cameras.slice(0, 4) : cameras.slice(0, 9);
 
@@ -82,19 +142,19 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Người phát hiện"
-            value="247"
+            value={String(stats?.total_persons ?? 0)}
             icon={<Users className="h-5 w-5 text-blue-500" />}
-            subtitle="Hôm nay"
+            subtitle="Tổng cộng"
           />
           <StatCard
             label="Phương tiện"
-            value="183"
+            value={String(stats?.total_vehicles ?? 0)}
             icon={<Car className="h-5 w-5 text-zinc-400" />}
-            subtitle="Hôm nay"
+            subtitle="Tổng cộng"
           />
           <StatCard
             label="Cảnh báo"
-            value="3"
+            value={String(stats?.active_alerts ?? 0)}
             icon={<AlertTriangle className="h-5 w-5 text-amber-500" />}
             subtitle="Chưa xử lý"
             subtitleBadge
@@ -132,15 +192,16 @@ export default function DashboardPage() {
         <div className={`grid ${cols} gap-4 flex-1 min-h-[400px]`}>
           {displayCameras.map((cam) => (
             <CameraTile
-              key={cam.id}
+              key={cam.camera_id}
               name={cam.name}
-              status={cam.status as "online" | "offline"}
+              status={getStatus(cam)}
               streamUrl={
-                cam.status === "online"
-                  ? `${GO2RTC_BASE}/stream.html?src=${cam.stream_id}&mode=webrtc`
+                getStatus(cam) === "online"
+                  ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc`
                   : undefined
               }
-              aiTags={cam.ai_features}
+              resolution={cam.resolution || "1080P / 30FPS"}
+              aiTags={getAiTags(cam)}
             />
           ))}
         </div>
