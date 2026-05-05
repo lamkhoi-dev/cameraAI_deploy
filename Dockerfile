@@ -24,14 +24,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libtbb2 \
     libtbb-dev \
-    libjasper-dev \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
     libdc1394-dev \
     libharfbuzz0b \
     libwebp7 \
-    libtesseract5 \
+    tesseract-ocr \
+    libtesseract-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -58,7 +58,7 @@ COPY . .
 RUN mkdir -p ai_engine/models cropped_data/persons cropped_data/vehicles cropped_data/fire_alerts
 
 # Verify installation
-RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
+RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
 
 # Health check script
 RUN echo '#!/bin/bash\n\
