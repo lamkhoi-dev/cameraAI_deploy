@@ -68,13 +68,12 @@ services:
 
     # GPU support (Tesla P4)
     runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - CUDA_VISIBLE_DEVICES=0
 
     env_file: .env
     environment:
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+      CUDA_VISIBLE_DEVICES: "0"
       VIDEO_SOURCE: "rtsp://go2rtc-server:8554/camera1"
       BACKEND_API_URL: "http://cam-backend:8001"
       API_KEY: "${API_KEY:-}"
