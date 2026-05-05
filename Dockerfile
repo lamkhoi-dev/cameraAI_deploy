@@ -46,8 +46,8 @@ COPY requirements.txt .
 # CUDA 12.4 is the last version supporting Pascal GPUs
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install PyTorch 2.7 for CUDA 12.4 (last version supporting Tesla P4/Pascal)
-RUN pip install --no-cache-dir torch==2.7.0 torchvision==0.22.0 \
+# Install PyTorch for CUDA 12.4 (last version supporting Tesla P4/Pascal)
+RUN pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 \
     --index-url https://download.pytorch.org/whl/cu124 \
     && pip install --no-cache-dir -r requirements.txt
 
