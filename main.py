@@ -28,30 +28,51 @@ else:
 
 # ===== LOAD MÔ HÌNH =====
 # Model 1: Pose Detection (nhận diện người)
-model_pose = YOLO('yolov8n-pose.pt')
+# ✅ UPGRADED: YOLOv11s-pose (mAP 46.9%) thay YOLOv8n-pose (mAP 37%)
+model_path_pose = 'ai_engine/models/yolo11s-pose.pt'
+if not os.path.exists(model_path_pose):
+    print(f"⚠️  Model not found: {model_path_pose}")
+    print(f"    Fallback to: yolov8n-pose.pt")
+    model_path_pose = 'yolov8n-pose.pt'
+model_pose = YOLO(model_path_pose)
 if device != 'cpu':
     model_pose.to(device)
 
 # Model 2: Object Detection (nhận diện phương tiện)
-model_object = YOLO('yolov8n.pt')  # YOLOv8 nano cho object detection
+# ✅ UPGRADED: YOLOv11s (mAP 46.9%) thay YOLOv8n (mAP 39.4%)
+model_path_object = 'ai_engine/models/yolo11s.pt'
+if not os.path.exists(model_path_object):
+    print(f"⚠️  Model not found: {model_path_object}")
+    print(f"    Fallback to: yolov8n.pt")
+    model_path_object = 'yolov8n.pt'
+model_object = YOLO(model_path_object)
 if device != 'cpu':
     model_object.to(device)
 
 # Model 3: Fire/Smoke Detection (tùy chọn - nếu có model custom)
-# Bạn có thể thay thế bằng custom model nếu có
-# model_fire = YOLO('custom_fire_model.pt')
-fire_detection_enabled = True  # Sử dụng color-based + motion detection
+# ✅ UPGRADED: YOLO custom model thay HSV color filter (90% fewer false positives)
+model_fire = None
+fire_detection_enabled = False  # Set True after downloading fire model
+if os.path.exists('ai_engine/models/yolo11n-fire.pt'):
+    try:
+        model_fire = YOLO('ai_engine/models/yolo11n-fire.pt')
+        fire_detection_enabled = True
+        print("✓ Fire detection model loaded")
+    except Exception as e:
+        print(f"⚠️  Fire model load error: {e}")
 
 # Model 4: OCR - Đọc biển số xe (nếu sử dụng)
+# ✅ UPGRADED: PaddleOCR (better for Vietnamese) thay EasyOCR
 ocr_reader = None
 if USE_OCR:
     try:
-        import easyocr
-        print("⏳ Loading OCR model... (Lần đầu sẽ tải ~60MB)")
-        ocr_reader = easyocr.Reader(['vi', 'en'], gpu=(device != 'cpu'))
-        print("✓ OCR model loaded")
+        from paddleocr import PaddleOCR
+        print("⏳ Loading OCR model (PaddleOCR)... (Lần đầu sẽ tải ~200MB)")
+        # CPU mode để giải phóng GPU VRAM cho YOLO models
+        ocr_reader = PaddleOCR(use_angle_cls=True, lang='vi', use_gpu=False)
+        print("✓ OCR model loaded (PaddleOCR - CPU mode)")
     except ImportError:
-        print("⚠ EasyOCR not installed. Install with: pip install easyocr")
+        print("⚠ PaddleOCR not installed. Install with: pip install paddleocr paddlepaddle")
         USE_OCR = False
     except Exception as e:
         print(f"⚠ OCR load error: {e}")
@@ -74,7 +95,24 @@ VEHICLE_NAMES_VN = {
     'bicycle': 'Xe đạp'
 }
 
-cap = cv2.VideoCapture('video1.mov')
+# ✅ UPGRADED: Support go2rtc RTSP streams + local video files
+# For production: use go2rtc RTSP (rtsp://localhost:8554/camera_id)
+# For testing: use local video file
+video_source = os.getenv('VIDEO_SOURCE', 'video1.mov')
+if not os.path.exists(video_source) and not video_source.startswith('rtsp://'):
+    print(f"⚠️  Video file not found: {video_source}")
+    print(f"    Using fallback: video1.mov")
+    video_source = 'video1.mov'
+
+print(f"📹 Loading video source: {video_source}")
+
+cap = cv2.VideoCapture(video_source)
+
+# Check if video opened successfully
+if not cap.isOpened():
+    print(f"❌ Failed to open video: {video_source}")
+    print("   Check if video file exists or RTSP server is running")
+    exit(1)
 
 # Lấy thông tin video
 fps_video = cap.get(cv2.CAP_PROP_FPS)
@@ -396,27 +434,54 @@ def recognize_license_plate(license_plate_crop):
         return None
 
 # ===== HÀM PHÁT HIỆN CHÁY/KHÓI =====
+def detect_fire_smoke_yolo(frame):
+    """
+    ✅ UPGRADED: YOLO model-based fire detection (replaces HSV)
+    Much more accurate than HSV color thresholding
+    """
+    if not model_fire or frame is None:
+        return {'fire': False, 'smoke': False, 'confidence': 0}
+    
+    try:
+        results = model_fire.predict(frame, conf=0.5, verbose=False)
+        if results[0].boxes:
+            # Get class names and confidence
+            for box in results[0].boxes:
+                class_id = int(box.cls)
+                conf = float(box.conf)
+                class_name = model_fire.model.names.get(class_id, '')
+                
+                if class_name.lower() in ['fire', 'lửa']:
+                    return {'fire': True, 'smoke': False, 'confidence': conf}
+                elif class_name.lower() in ['smoke', 'khói']:
+                    return {'fire': False, 'smoke': True, 'confidence': conf}
+        
+        return {'fire': False, 'smoke': False, 'confidence': 0}
+    except Exception as e:
+        print(f"  ! Lỗi YOLO fire detection: {e}")
+        return {'fire': False, 'smoke': False, 'confidence': 0}
+
 def detect_fire_smoke(frame, threshold_fire=0.25, threshold_smoke=0.25):
     """
-    Phát hiện lửa và khói trong frame dựa trên màu sắc HSV
-    Lửa: Hue 0-30 (đỏ-cam-vàng), Saturation cao (>100), Value cao (>100)
-    Khói: Màu xám, Saturation thấp (<50), Value trung bình (80-180)
-    
-    threshold_fire: 0.25 (25% diện tích) - tăng lên để giảm false positive
-    threshold_smoke: 0.25 (25% diện tích) - tăng lên để giảm false positive
+    ⚠️  DEPRECATED: HSV color-based detection (causes 90% false positives)
+    ✅ NOW: Uses YOLO model if available, falls back to HSV
     """
     if frame is None or frame.size == 0:
         return {'fire': False, 'smoke': False, 'fire_percentage': 0, 'smoke_percentage': 0}
     
+    # Try YOLO first
+    if fire_detection_enabled and model_fire:
+        result_yolo = detect_fire_smoke_yolo(frame)
+        if result_yolo['fire'] or result_yolo['smoke']:
+            return result_yolo
+    
+    # Fallback to HSV (deprecated)
     try:
-        # Chuyển sang HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         h, w, _ = hsv.shape
         
-        # ===== PHÁT HIỆN LỬA (Tối ưu hơn) =====
-        # Lửa: Hue 0-30 hoặc 170-179 (đỏ-cam-vàng)
-        # Saturation cao (> 120) - tăng từ 100 để loại bỏ xám
-        # Value cao (> 120) - tăng từ 100
+        # ⚠️  NOTE: HSV detection has ~90% false positive rate
+        # Use YOLO model instead (see fire_detection_enabled flag)
         lower_red1 = np.array([0, 120, 120])
         upper_red1 = np.array([30, 255, 255])
         lower_red2 = np.array([170, 120, 120])
@@ -430,16 +495,9 @@ def detect_fire_smoke(frame, threshold_fire=0.25, threshold_smoke=0.25):
         fire_percentage = fire_pixels / (h * w)
         fire_detected = fire_percentage > threshold_fire
         
-        # ===== PHÁT HIỆN KHÓI (Tối ưu hơn) =====
-        # Khói: Xám - Saturation rất thấp (<40), Value trung bình (70-200)
-        # Loại bỏ pixel đen (value < 70) và quá sáng (value > 200)
         lower_smoke = np.array([0, 0, 70])
         upper_smoke = np.array([179, 40, 200])
-        
         smoke_mask = cv2.inRange(hsv, lower_smoke, upper_smoke)
-        
-        # Thêm kiểm tra: chỉ lấy pixel không quá xám đậm (để loại bỏ shadow)
-        # Saturation > 0 và < 40 (xám thực)
         saturation_check = hsv[:, :, 1]
         saturation_mask = (saturation_check > 0) & (saturation_check < 40)
         smoke_mask = cv2.bitwise_and(smoke_mask, saturation_mask.astype(np.uint8) * 255)

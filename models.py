@@ -21,6 +21,12 @@ class Person(db.Model):
     pants_colors = db.Column(db.JSON, nullable=True)  # JSON array of colors
     hair_colors = db.Column(db.JSON, nullable=True)   # JSON array of colors
     
+    # Face Recognition (Phase 2)
+    face_embedding = db.Column(db.JSON, nullable=True)  # 512-dim ArcFace embedding (list of floats)
+    face_embedding_model = db.Column(db.String(50), default="buffalo_l")  # Model used
+    face_confidence = db.Column(db.Float, nullable=True)  # Face detection confidence
+    face_bbox = db.Column(db.JSON, nullable=True)  # Face bounding box [x1, y1, x2, y2]
+    
     # Metadata
     confidence = db.Column(db.Float, default=0.0)
     frame_index = db.Column(db.Integer, nullable=True)
@@ -50,6 +56,10 @@ class Person(db.Model):
             'frame_index': self.frame_index,
             'video_source': self.video_source,
             'notes': self.notes,
+            'face_embedding': self.face_embedding or None,
+            'face_embedding_model': self.face_embedding_model,
+            'face_confidence': self.face_confidence,
+            'face_bbox': self.face_bbox,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

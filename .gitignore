@@ -2,7 +2,6 @@
 venv/
 env/
 ENV/
-.venv/
 
 # Python
 __pycache__/
@@ -37,34 +36,12 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Environment files (NEVER commit credentials)
+# Project specific
+*.pyc
 .env
 .env.local
-.env.production
-.env.*.local
 
-# Node.js / Frontend
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-
-# Docker
-*.log
-
-# Model weights (large files)
-*.pt
-*.engine
-*.onnx
-
-# Media / Uploads
-cropped_data/
-uploads/
-snapshots/
-
-# go2rtc template is committed; real credentials should only be on server
-# media_server/go2rtc.yaml
-
-# Video files
-*.mov
-*.mp4
-*.avi
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env.local
