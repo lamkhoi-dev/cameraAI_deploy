@@ -92,12 +92,12 @@ services:
         limits:
           cpus: '8'
           memory: 8G
+        reservations:
+          memory: 6G
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-        reservations:
-          memory: 6G
 
     restart: unless-stopped
 
