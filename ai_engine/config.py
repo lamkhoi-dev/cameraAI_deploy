@@ -97,7 +97,7 @@ KNOWN_FACES_DB_DIR = BASE_DIR / "known_faces"  # Directory to store known face e
 KNOWN_FACES_DB_DIR.mkdir(exist_ok=True)
 
 # ============= API CONFIGURATION =============
-BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000")
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8001")
 API_KEY = os.getenv("API_KEY", "")
 API_TIMEOUT = 10                       # API request timeout in seconds
 
