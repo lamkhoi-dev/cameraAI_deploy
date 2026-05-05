@@ -40,3 +40,8 @@ Thumbs.db
 *.pyc
 .env
 .env.local
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env.local
