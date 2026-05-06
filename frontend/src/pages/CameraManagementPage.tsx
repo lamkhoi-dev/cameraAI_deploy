@@ -75,7 +75,7 @@ function extractIp(streamUrl: string): string {
 }
 
 function getStatus(cam: BackendCamera): "online" | "offline" {
-  return cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
+  return cam.is_active ? "online" : "offline";
 }
 
 export default function CameraManagementPage() {

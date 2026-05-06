@@ -198,7 +198,7 @@ export default function DashboardPage() {
               status={getStatus(cam)}
               streamUrl={
                 getStatus(cam) === "online"
-                  ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=mse`
+                  ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc,mse`
                   : undefined
               }
               resolution={cam.resolution || "1080P / 30FPS"}

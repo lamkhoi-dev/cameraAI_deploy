@@ -85,7 +85,7 @@ export default function LiveViewPage() {
           </div>
           <div className="flex-1 bg-black relative">
             <iframe
-              src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.camera_id}&mode=mse`}
+              src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.camera_id}&mode=webrtc,mse`}
               className="w-full h-full border-0"
               allow="autoplay; fullscreen"
               title={expandedCam.name}
@@ -167,7 +167,7 @@ export default function LiveViewPage() {
                 status={camStatus}
                 streamUrl={
                   camStatus === "online"
-                    ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=mse`
+                    ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc,mse`
                     : undefined
                 }
                 aiTags={getAiTags(cam)}
