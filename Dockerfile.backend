@@ -1,0 +1,32 @@
+FROM python:3.10-slim
+
+LABEL maintainer="Camera AI Team"
+LABEL description="Camera Tracking AI — Flask Backend API (lightweight, no GPU)"
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# System deps for psycopg2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements-backend.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy only what the Flask backend needs
+COPY app.py models.py camera_manager.py ./
+COPY templates/ ./templates/ 2>/dev/null || true
+COPY static/ ./static/ 2>/dev/null || true
+
+# Create directories
+RUN mkdir -p cropped_data/persons cropped_data/vehicles cropped_data/fire_alerts
+
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
+
+CMD ["python3", "app.py"]
