@@ -18,8 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy only what the Flask backend needs
 COPY app.py models.py camera_manager.py ./
-COPY templates/ ./templates/ 2>/dev/null || true
-COPY static/ ./static/ 2>/dev/null || true
 
 # Create directories
 RUN mkdir -p cropped_data/persons cropped_data/vehicles cropped_data/fire_alerts
