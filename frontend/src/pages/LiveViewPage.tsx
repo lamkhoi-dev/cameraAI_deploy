@@ -3,7 +3,12 @@ import { CameraTile } from "@/components/CameraTile";
 import { LayoutGrid, Rows3, Grid3X3, X } from "lucide-react";
 import api from "@/api/client";
 
-const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "http://localhost:1984";
+const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
+// Absolute base for iframes (must be full URL)
+const go2rtcAbsolute = () =>
+  typeof window !== "undefined" && GO2RTC_BASE.startsWith("/")
+    ? `${window.location.origin}${GO2RTC_BASE}`
+    : GO2RTC_BASE;
 
 interface BackendCamera {
   id: number;
@@ -21,7 +26,7 @@ interface BackendCamera {
 type Layout = "2x2" | "3x3" | "4x4";
 
 const getStatus = (cam: BackendCamera): "online" | "offline" =>
-  cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
+  cam.is_active ? "online" : "offline";
 
 const getAiTags = (cam: BackendCamera): string[] =>
   cam.enable_detection ? ["AI Active"] : [];
@@ -84,7 +89,7 @@ export default function LiveViewPage() {
           </div>
           <div className="flex-1 bg-black relative">
             <iframe
-              src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.camera_id}&mode=webrtc`}
+              src={`${go2rtcAbsolute()}/stream.html?src=${expandedCam.camera_id}&mode=webrtc`}
               className="w-full h-full border-0"
               allow="autoplay; fullscreen"
               title={expandedCam.name}
@@ -166,7 +171,7 @@ export default function LiveViewPage() {
                 status={camStatus}
                 streamUrl={
                   camStatus === "online"
-                    ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc`
+                    ? `${go2rtcAbsolute()}/stream.html?src=${cam.camera_id}&mode=webrtc`
                     : undefined
                 }
                 aiTags={getAiTags(cam)}
