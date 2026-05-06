@@ -17,11 +17,8 @@ import {
 import api from "@/api/client";
 import { useSocket } from "@/hooks/useSocket";
 
+// Same-origin proxy via nginx — no cross-origin issues
 const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
-const go2rtcAbsolute = () =>
-  typeof window !== "undefined" && GO2RTC_BASE.startsWith("/")
-    ? `${window.location.origin}${GO2RTC_BASE}`
-    : GO2RTC_BASE;
 
 // Backend Camera model shape
 interface BackendCamera {
@@ -201,7 +198,7 @@ export default function DashboardPage() {
               status={getStatus(cam)}
               streamUrl={
                 getStatus(cam) === "online"
-                  ? `${go2rtcAbsolute()}/stream.html?src=${cam.camera_id}&mode=webrtc`
+                  ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=mse`
                   : undefined
               }
               resolution={cam.resolution || "1080P / 30FPS"}
