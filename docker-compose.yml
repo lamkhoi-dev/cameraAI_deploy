@@ -136,7 +136,7 @@ services:
       - TZ=Asia/Ho_Chi_Minh
 
     volumes:
-      - ./go2rtc.yaml:/app/go2rtc.yaml:ro
+      - ./media_server/go2rtc.yaml:/config/go2rtc.yaml:ro
 
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:1984/api"]
