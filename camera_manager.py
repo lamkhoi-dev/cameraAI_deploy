@@ -15,11 +15,14 @@ class CameraManager:
         self._cameras: dict = {}  # camera_id -> status dict
         self._running: dict = {}  # camera_id -> bool
 
-    def add_camera(self, camera_id: str, rtsp_url: str, **kwargs) -> bool:
+    def add_camera(self, camera_id: str, rtsp_url: str, username: str = None, password: str = None, fps: int = 30) -> bool:
         """Register a camera stream."""
         self._cameras[camera_id] = {
             "camera_id": camera_id,
             "rtsp_url": rtsp_url,
+            "username": username,
+            "password": password,
+            "fps": fps,
             "running": False,
         }
         logger.info(f"Camera registered: {camera_id} -> {rtsp_url}")
