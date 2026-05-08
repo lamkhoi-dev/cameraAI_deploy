@@ -532,6 +532,220 @@ def delete_person(person_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# ===== ADVANCED SEARCH APIs - PERSONS =====
+
+@app.route('/api/persons/search/advanced', methods=['POST'])
+def search_persons_advanced():
+    """
+    Advanced search for persons by multiple attributes
+    
+    Request body:
+    {
+        "location": "cam_01",
+        "start_time": "2026-05-06T08:00:00Z",
+        "end_time": "2026-05-06T18:00:00Z",
+        "shirt_color": "blue",
+        "pants_color": "black",
+        "hair_color": "black",
+        "confidence_min": 0.8,
+        "confidence_max": 1.0,
+        "page": 1,
+        "limit": 50
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        # Build query
+        query = Person.query
+        
+        # Location filter
+        if data.get('location'):
+            query = query.filter(Person.location.ilike(f"%{data['location']}%"))
+        
+        # Time range filters
+        if data.get('start_time'):
+            try:
+                start_dt = datetime.fromisoformat(data['start_time'])
+                query = query.filter(Person.timestamp >= start_dt)
+            except ValueError:
+                pass
+        
+        if data.get('end_time'):
+            try:
+                end_dt = datetime.fromisoformat(data['end_time'])
+                query = query.filter(Person.timestamp <= end_dt)
+            except ValueError:
+                pass
+        
+        # Confidence filters
+        if data.get('confidence_min'):
+            query = query.filter(Person.confidence >= float(data['confidence_min']))
+        
+        if data.get('confidence_max'):
+            query = query.filter(Person.confidence <= float(data['confidence_max']))
+        
+        # Color filters - search in JSON arrays
+        if data.get('shirt_color'):
+            color_name = data['shirt_color'].lower()
+            query = query.filter(
+                Person.shirt_colors.astext.ilike(f"%{color_name}%")
+            )
+        
+        if data.get('pants_color'):
+            color_name = data['pants_color'].lower()
+            query = query.filter(
+                Person.pants_colors.astext.ilike(f"%{color_name}%")
+            )
+        
+        if data.get('hair_color'):
+            color_name = data['hair_color'].lower()
+            query = query.filter(
+                Person.hair_colors.astext.ilike(f"%{color_name}%")
+            )
+        
+        # Sort by timestamp (newest first)
+        query = query.order_by(desc(Person.timestamp))
+        
+        # Pagination
+        page = data.get('page', 1)
+        limit = min(data.get('limit', 50), 500)  # Max 500 results
+        
+        paginated = query.paginate(page=page, per_page=limit, error_out=False)
+        
+        return jsonify({
+            'status': 'success',
+            'total_results': paginated.total,
+            'current_page': page,
+            'results_per_page': limit,
+            'total_pages': paginated.pages,
+            'results': [p.to_dict() for p in paginated.items]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/persons/search/by-appearance', methods=['POST'])
+def search_by_appearance():
+    """
+    Search persons by appearance (hair, shirt, pants colors)
+    Useful for finding suspects or specific individuals
+    
+    Request:
+    {
+        "hair_color": "black",
+        "shirt_color": "blue",
+        "pants_color": "black",
+        "confidence_min": 0.75,
+        "limit": 20
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        query = Person.query
+        
+        # Search by appearance attributes
+        if data.get('hair_color'):
+            query = query.filter(
+                Person.hair_colors.astext.ilike(f"%{data['hair_color']}%")
+            )
+        
+        if data.get('shirt_color'):
+            query = query.filter(
+                Person.shirt_colors.astext.ilike(f"%{data['shirt_color']}%")
+            )
+        
+        if data.get('pants_color'):
+            query = query.filter(
+                Person.pants_colors.astext.ilike(f"%{data['pants_color']}%")
+            )
+        
+        # Confidence threshold
+        if data.get('confidence_min'):
+            query = query.filter(Person.confidence >= float(data['confidence_min']))
+        
+        query = query.order_by(desc(Person.timestamp))
+        
+        limit = min(data.get('limit', 20), 200)
+        results = query.limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'query_filters': {
+                'hair_color': data.get('hair_color'),
+                'shirt_color': data.get('shirt_color'),
+                'pants_color': data.get('pants_color'),
+                'confidence_min': data.get('confidence_min')
+            },
+            'results_count': len(results),
+            'results': [p.to_dict() for p in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/persons/search/by-location-time', methods=['POST'])
+def search_by_location_time():
+    """
+    Search persons by camera location and time range
+    Find all people detected at specific location during time period
+    
+    Request:
+    {
+        "location": "cam_01",
+        "start_time": "2026-05-06T08:00:00Z",
+        "end_time": "2026-05-06T18:00:00Z",
+        "limit": 100
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        query = Person.query
+        
+        # Location is required for this search
+        if not data.get('location'):
+            return jsonify({'error': 'location parameter is required'}), 400
+        
+        query = query.filter(Person.location.ilike(f"%{data['location']}%"))
+        
+        # Time range
+        if data.get('start_time'):
+            try:
+                start_dt = datetime.fromisoformat(data['start_time'])
+                query = query.filter(Person.timestamp >= start_dt)
+            except ValueError:
+                return jsonify({'error': 'Invalid start_time format (use ISO 8601)'}), 400
+        
+        if data.get('end_time'):
+            try:
+                end_dt = datetime.fromisoformat(data['end_time'])
+                query = query.filter(Person.timestamp <= end_dt)
+            except ValueError:
+                return jsonify({'error': 'Invalid end_time format (use ISO 8601)'}), 400
+        
+        query = query.order_by(desc(Person.timestamp))
+        
+        limit = min(data.get('limit', 100), 1000)
+        results = query.limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'location': data.get('location'),
+            'time_range': {
+                'start': data.get('start_time'),
+                'end': data.get('end_time')
+            },
+            'results_count': len(results),
+            'results': [p.to_dict() for p in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
 # ===== API ENDPOINTS - VEHICLES =====
 
 @app.route('/api/vehicles', methods=['POST'])
@@ -691,6 +905,172 @@ def delete_vehicle(vehicle_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# ===== ADVANCED SEARCH APIs - VEHICLES =====
+
+@app.route('/api/vehicles/search/advanced', methods=['POST'])
+def search_vehicles_advanced():
+    """
+    Advanced search for vehicles by multiple attributes
+    
+    Request body:
+    {
+        "vehicle_type": "car",
+        "license_plate": "51A-12345",
+        "vehicle_color": "white",
+        "location": "cam_01",
+        "start_time": "2026-05-06T08:00:00Z",
+        "end_time": "2026-05-06T18:00:00Z",
+        "confidence_min": 0.8,
+        "page": 1,
+        "limit": 50
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        query = Vehicle.query
+        
+        # Vehicle type filter
+        if data.get('vehicle_type'):
+            query = query.filter(Vehicle.vehicle_type.ilike(f"%{data['vehicle_type']}%"))
+        
+        # License plate filter
+        if data.get('license_plate'):
+            query = query.filter(Vehicle.license_plate.ilike(f"%{data['license_plate']}%"))
+        
+        # Location filter
+        if data.get('location'):
+            query = query.filter(Vehicle.location.ilike(f"%{data['location']}%"))
+        
+        # Time range filters
+        if data.get('start_time'):
+            try:
+                start_dt = datetime.fromisoformat(data['start_time'])
+                query = query.filter(Vehicle.timestamp >= start_dt)
+            except ValueError:
+                pass
+        
+        if data.get('end_time'):
+            try:
+                end_dt = datetime.fromisoformat(data['end_time'])
+                query = query.filter(Vehicle.timestamp <= end_dt)
+            except ValueError:
+                pass
+        
+        # Confidence filter
+        if data.get('confidence_min'):
+            query = query.filter(Vehicle.confidence >= float(data['confidence_min']))
+        
+        # Vehicle color filter - search in JSON array
+        if data.get('vehicle_color'):
+            color_name = data['vehicle_color'].lower()
+            query = query.filter(
+                Vehicle.vehicle_colors.astext.ilike(f"%{color_name}%")
+            )
+        
+        # Sort by timestamp (newest first)
+        query = query.order_by(desc(Vehicle.timestamp))
+        
+        # Pagination
+        page = data.get('page', 1)
+        limit = min(data.get('limit', 50), 500)
+        
+        paginated = query.paginate(page=page, per_page=limit, error_out=False)
+        
+        return jsonify({
+            'status': 'success',
+            'total_results': paginated.total,
+            'current_page': page,
+            'results_per_page': limit,
+            'total_pages': paginated.pages,
+            'results': [v.to_dict() for v in paginated.items]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/vehicles/search/by-license-plate', methods=['GET'])
+def search_by_license_plate():
+    """
+    Search vehicles by license plate
+    Useful for finding all sightings of a specific vehicle
+    
+    Query params:
+    - license_plate: Required, the plate number
+    - limit: Max results (default 50)
+    """
+    try:
+        license_plate = request.args.get('license_plate')
+        
+        if not license_plate:
+            return jsonify({'error': 'license_plate parameter is required'}), 400
+        
+        limit = min(request.args.get('limit', 50, type=int), 500)
+        
+        results = Vehicle.query.filter(
+            Vehicle.license_plate.ilike(f"%{license_plate}%")
+        ).order_by(desc(Vehicle.timestamp)).limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'license_plate': license_plate,
+            'results_count': len(results),
+            'results': [v.to_dict() for v in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/vehicles/search/by-type-color', methods=['POST'])
+def search_by_vehicle_type_color():
+    """
+    Search vehicles by type and color combination
+    Useful for finding similar vehicles
+    
+    Request:
+    {
+        "vehicle_type": "car",
+        "vehicle_color": "white",
+        "location": "cam_01",
+        "limit": 30
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        query = Vehicle.query
+        
+        if data.get('vehicle_type'):
+            query = query.filter(Vehicle.vehicle_type.ilike(f"%{data['vehicle_type']}%"))
+        
+        if data.get('vehicle_color'):
+            color_name = data['vehicle_color'].lower()
+            query = query.filter(Vehicle.vehicle_colors.astext.ilike(f"%{color_name}%"))
+        
+        if data.get('location'):
+            query = query.filter(Vehicle.location.ilike(f"%{data['location']}%"))
+        
+        query = query.order_by(desc(Vehicle.timestamp))
+        
+        limit = min(data.get('limit', 30), 300)
+        results = query.limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'filters': {
+                'vehicle_type': data.get('vehicle_type'),
+                'vehicle_color': data.get('vehicle_color'),
+                'location': data.get('location')
+            },
+            'results_count': len(results),
+            'results': [v.to_dict() for v in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
 # ===== API ENDPOINTS - ALERTS =====
 
 @app.route('/api/alerts', methods=['POST'])
@@ -817,6 +1197,162 @@ def delete_alert(alert_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+# ===== ADVANCED SEARCH APIs - ALERTS =====
+
+@app.route('/api/alerts/search/advanced', methods=['POST'])
+def search_alerts_advanced():
+    """
+    Advanced search for alerts by multiple criteria
+    
+    Request body:
+    {
+        "alert_type": "fire",
+        "status": "active",
+        "severity": "high",
+        "location": "cam_01",
+        "start_time": "2026-05-06T08:00:00Z",
+        "end_time": "2026-05-06T18:00:00Z",
+        "page": 1,
+        "limit": 50
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        
+        query = Alert.query
+        
+        # Alert type filter
+        if data.get('alert_type'):
+            query = query.filter(Alert.alert_type.ilike(f"%{data['alert_type']}%"))
+        
+        # Status filter
+        if data.get('status'):
+            query = query.filter_by(status=data['status'])
+        
+        # Severity filter
+        if data.get('severity'):
+            query = query.filter_by(severity=data['severity'])
+        
+        # Location filter
+        if data.get('location'):
+            query = query.filter(Alert.location.ilike(f"%{data['location']}%"))
+        
+        # Time range filters
+        if data.get('start_time'):
+            try:
+                start_dt = datetime.fromisoformat(data['start_time'])
+                query = query.filter(Alert.timestamp >= start_dt)
+            except ValueError:
+                pass
+        
+        if data.get('end_time'):
+            try:
+                end_dt = datetime.fromisoformat(data['end_time'])
+                query = query.filter(Alert.timestamp <= end_dt)
+            except ValueError:
+                pass
+        
+        # Sort by timestamp (newest first)
+        query = query.order_by(desc(Alert.timestamp))
+        
+        # Pagination
+        page = data.get('page', 1)
+        limit = min(data.get('limit', 50), 500)
+        
+        paginated = query.paginate(page=page, per_page=limit, error_out=False)
+        
+        return jsonify({
+            'status': 'success',
+            'total_results': paginated.total,
+            'current_page': page,
+            'results_per_page': limit,
+            'total_pages': paginated.pages,
+            'results': [a.to_dict() for a in paginated.items]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/alerts/search/by-type-severity', methods=['GET'])
+def search_alerts_by_type_severity():
+    """
+    Search alerts by type and severity
+    Useful for finding high-priority incidents
+    
+    Query params:
+    - alert_type: fire, suspicious, etc (optional)
+    - severity: low, normal, high, critical (optional)
+    - limit: Max results (default 50)
+    """
+    try:
+        alert_type = request.args.get('alert_type')
+        severity = request.args.get('severity')
+        limit = min(request.args.get('limit', 50, type=int), 500)
+        
+        query = Alert.query
+        
+        if alert_type:
+            query = query.filter(Alert.alert_type.ilike(f"%{alert_type}%"))
+        
+        if severity:
+            query = query.filter_by(severity=severity)
+        
+        results = query.order_by(desc(Alert.timestamp)).limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'filters': {
+                'alert_type': alert_type,
+                'severity': severity
+            },
+            'results_count': len(results),
+            'results': [a.to_dict() for a in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/alerts/search/active', methods=['GET'])
+def search_active_alerts():
+    """
+    Get all active (unresolved) alerts
+    Useful for incident dashboard
+    
+    Query params:
+    - severity: Filter by severity (optional)
+    - location: Filter by location (optional)
+    - limit: Max results (default 100)
+    """
+    try:
+        severity = request.args.get('severity')
+        location = request.args.get('location')
+        limit = min(request.args.get('limit', 100, type=int), 1000)
+        
+        query = Alert.query.filter(
+            Alert.status.in_(['active', 'escalated'])
+        )
+        
+        if severity:
+            query = query.filter_by(severity=severity)
+        
+        if location:
+            query = query.filter(Alert.location.ilike(f"%{location}%"))
+        
+        results = query.order_by(desc(Alert.timestamp)).limit(limit).all()
+        
+        return jsonify({
+            'status': 'success',
+            'active_alerts_count': len(results),
+            'critical_alerts': len([a for a in results if a.severity == 'critical']),
+            'high_alerts': len([a for a in results if a.severity == 'high']),
+            'results': [a.to_dict() for a in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 # ===== API ENDPOINTS - THỐNG KÊ =====
 
@@ -1019,6 +1555,190 @@ def get_face_stats():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ===== ADVANCED SEARCH APIs - FACES =====
+
+@app.route('/api/faces/search/embedding', methods=['POST'])
+def search_faces_by_embedding():
+    """
+    Search for matching faces using embedding vector
+    Find similar faces in the database
+    
+    Request:
+    {
+        "embedding": [...],        # 512-dimensional vector
+        "threshold": 0.6,          # Similarity threshold (0.0-1.0)
+        "limit": 20
+    }
+    """
+    if not FACE_MATCHING_AVAILABLE:
+        return jsonify({'error': 'Face matching not available'}), 501
+    
+    try:
+        data = request.get_json() or {}
+        
+        embedding = data.get('embedding')
+        threshold = data.get('threshold', 0.6)
+        limit = min(data.get('limit', 20), 100)
+        
+        if not embedding:
+            return jsonify({'error': 'embedding parameter is required'}), 400
+        
+        if len(embedding) != 512:
+            return jsonify({'error': 'Embedding must be 512-dimensional'}), 400
+        
+        # Search in persons table
+        import numpy as np
+        
+        query_embedding = np.array(embedding, dtype=np.float32)
+        persons = Person.query.filter(Person.face_embedding != None).limit(1000).all()
+        
+        matches = []
+        for person in persons:
+            if person.face_embedding:
+                stored_embedding = np.array(person.face_embedding, dtype=np.float32)
+                
+                # Cosine similarity
+                dot_product = np.dot(query_embedding, stored_embedding)
+                norm_query = np.linalg.norm(query_embedding)
+                norm_stored = np.linalg.norm(stored_embedding)
+                
+                if norm_query > 0 and norm_stored > 0:
+                    similarity = dot_product / (norm_query * norm_stored)
+                    
+                    if similarity >= threshold:
+                        matches.append({
+                            'person_id': person.person_id,
+                            'similarity': float(similarity),
+                            'similarity_percent': round(similarity * 100, 2),
+                            'location': person.location,
+                            'timestamp': person.timestamp.isoformat() if person.timestamp else None,
+                            'confidence': person.confidence
+                        })
+        
+        # Sort by similarity (highest first)
+        matches.sort(key=lambda x: x['similarity'], reverse=True)
+        matches = matches[:limit]
+        
+        return jsonify({
+            'status': 'success',
+            'query_threshold': threshold,
+            'matches_count': len(matches),
+            'results': matches
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/faces/search/by-person-id', methods=['GET'])
+def search_faces_by_person():
+    """
+    Get all face detections for a specific person
+    Shows detection history and appearances
+    
+    Query params:
+    - person_id: Person ID (required)
+    - start_time: Start time (optional)
+    - end_time: End time (optional)
+    - limit: Max results (default 50)
+    """
+    try:
+        person_id = request.args.get('person_id')
+        
+        if not person_id:
+            return jsonify({'error': 'person_id parameter is required'}), 400
+        
+        query = Person.query.filter_by(person_id=person_id)
+        
+        # Time filters
+        start_time = request.args.get('start_time')
+        if start_time:
+            try:
+                start_dt = datetime.fromisoformat(start_time)
+                query = query.filter(Person.timestamp >= start_dt)
+            except ValueError:
+                pass
+        
+        end_time = request.args.get('end_time')
+        if end_time:
+            try:
+                end_dt = datetime.fromisoformat(end_time)
+                query = query.filter(Person.timestamp <= end_dt)
+            except ValueError:
+                pass
+        
+        limit = min(request.args.get('limit', 50, type=int), 500)
+        results = query.order_by(desc(Person.timestamp)).limit(limit).all()
+        
+        # Get unique locations where person was detected
+        locations = set(p.location for p in results if p.location)
+        
+        return jsonify({
+            'status': 'success',
+            'person_id': person_id,
+            'detections_count': len(results),
+            'locations': list(locations),
+            'results': [p.to_dict() for p in results]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@app.route('/api/faces/search/with-embedding', methods=['GET'])
+def search_persons_with_embedding():
+    """
+    Find all persons that have registered face embeddings
+    Useful for FaceID matching database
+    
+    Query params:
+    - location: Filter by location (optional)
+    - start_time: From this time (optional)
+    - end_time: Until this time (optional)
+    - page: Page number (default 1)
+    - limit: Results per page (default 20)
+    """
+    try:
+        location = request.args.get('location')
+        start_time = request.args.get('start_time')
+        end_time = request.args.get('end_time')
+        page = request.args.get('page', 1, type=int)
+        limit = min(request.args.get('limit', 20, type=int), 200)
+        
+        query = Person.query.filter(Person.face_embedding != None)
+        
+        if location:
+            query = query.filter(Person.location.ilike(f"%{location}%"))
+        
+        if start_time:
+            try:
+                start_dt = datetime.fromisoformat(start_time)
+                query = query.filter(Person.timestamp >= start_dt)
+            except ValueError:
+                pass
+        
+        if end_time:
+            try:
+                end_dt = datetime.fromisoformat(end_time)
+                query = query.filter(Person.timestamp <= end_dt)
+            except ValueError:
+                pass
+        
+        query = query.order_by(desc(Person.updated_at))
+        paginated = query.paginate(page=page, per_page=limit, error_out=False)
+        
+        return jsonify({
+            'status': 'success',
+            'total_with_embeddings': paginated.total,
+            'current_page': page,
+            'results_per_page': limit,
+            'total_pages': paginated.pages,
+            'results': [p.to_dict() for p in paginated.items]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 @app.route('/api/faces/known/<person_id>', methods=['DELETE'])
 def remove_known_face(person_id):
