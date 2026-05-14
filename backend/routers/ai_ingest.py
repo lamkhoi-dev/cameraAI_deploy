@@ -16,6 +16,15 @@ from schemas.ai_ingest import (
 from services.ws_manager import ws_manager
 from services import camera_service
 
+
+def _naive_utc(dt: datetime | None) -> datetime:
+    """Convert timezone-aware datetime to naive UTC for PostgreSQL."""
+    if dt is None:
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 router = APIRouter(prefix="/api/ai", tags=["AI Ingest"])
 
 # Store AI engine status in memory
@@ -31,7 +40,7 @@ async def ingest_persons(data: PersonResultPayload, db: AsyncSession = Depends(g
             person_id=f"p_{data.camera_id}_{data.frame_index}_{p.track_id or uuid.uuid4().hex[:6]}",
             camera_id=data.camera_id,
             location=data.camera_id,
-            timestamp=data.timestamp or datetime.now(timezone.utc),
+            timestamp=_naive_utc(data.timestamp),
             confidence=p.confidence,
             frame_index=data.frame_index,
             video_source=data.camera_id,
@@ -66,7 +75,7 @@ async def ingest_vehicles(data: VehicleResultPayload, db: AsyncSession = Depends
             vehicle_type=v.vehicle_type,
             license_plate=v.license_plate,
             location=data.camera_id,
-            timestamp=data.timestamp or datetime.now(timezone.utc),
+            timestamp=_naive_utc(data.timestamp),
             confidence=v.confidence,
             frame_index=data.frame_index,
             video_source=data.camera_id,
@@ -98,7 +107,7 @@ async def ingest_alert(data: AlertPayload, db: AsyncSession = Depends(get_db)):
         frame_index=data.frame_index,
         bbox=str(data.bbox) if data.bbox else None,
         snapshot_base64=data.snapshot_base64,
-        timestamp=data.timestamp or datetime.now(timezone.utc),
+        timestamp=_naive_utc(data.timestamp),
     )
     db.add(alert)
     await db.commit()
