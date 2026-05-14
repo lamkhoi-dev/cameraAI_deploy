@@ -39,6 +39,9 @@ services:
       postgres:
         condition: service_healthy
 
+    volumes:
+      - ./cropped_data:/app/cropped_data:ro
+
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s

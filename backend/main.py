@@ -1,9 +1,12 @@
 """Camera Tracking AI — Backend API Entry Point."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from sqlalchemy import select
 
@@ -13,6 +16,9 @@ from models.user import User
 from services.ws_manager import ws_manager
 
 from routers import auth, cameras, ai_ingest, ai_adapter, history
+
+CROPS_DIR = Path(os.getenv("CROPS_DIR", "/app/cropped_data"))
+CROPS_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -80,6 +86,9 @@ app.include_router(cameras.router)
 app.include_router(ai_ingest.router)    # /api/ai/* (new format — priority)
 app.include_router(ai_adapter.router)   # /api/persons, /api/vehicles, /api/alerts (legacy format)
 app.include_router(history.router)      # Note: history uses GET, adapter uses POST — no conflict
+
+# Serve crop images as static files
+app.mount("/api/crops", StaticFiles(directory=str(CROPS_DIR)), name="crops")
 
 
 # WebSocket endpoint for dashboard real-time updates
