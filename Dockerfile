@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwebp7 \
     tesseract-ocr \
     libtesseract-dev \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
