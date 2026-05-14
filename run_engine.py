@@ -78,7 +78,7 @@ def fetch_cameras():
         r = httpx.get(f"{BACKEND_URL}/api/cameras", timeout=10)
         r.raise_for_status()
         data = r.json()
-        cameras = data.get("cameras", data.get("items", []))
+        cameras = data.get("data", data.get("cameras", data.get("items", [])))
         active = [c for c in cameras if c.get("is_active", True)]
         log.info(f"✓ Fetched {len(active)} active cameras from backend")
         return active[:MAX_CAMERAS]
