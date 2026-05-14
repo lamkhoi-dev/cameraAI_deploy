@@ -96,15 +96,11 @@ export default function CameraManagementPage() {
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      const list = res.data.data || res.data;
+      const list = res.data.cameras || res.data.data || res.data;
       setCameras(Array.isArray(list) ? list : []);
-    } catch {
-      setCameras([
-        { id: 1, camera_id: "cam_01", name: "Sảnh A / Tầng 1", location: "Sảnh A", stream_url: "rtsp://admin:pass@192.168.1.101:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Hikvision", model: null, is_active: true, last_connection_status: "connected", enable_detection: true, username: null, password: null, notes: null },
-        { id: 2, camera_id: "cam_02", name: "Bãi xe B1", location: "Bãi xe", stream_url: "rtsp://admin:pass@192.168.1.102:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Dahua", model: null, is_active: true, last_connection_status: "connected", enable_detection: true, username: null, password: null, notes: null },
-        { id: 3, camera_id: "cam_03", name: "Hành lang C", location: "Hành lang", stream_url: "rtsp://admin:pass@192.168.1.103:554/stream1", protocol: "rtsp", resolution: "1920x1080", fps: 30, brand: "Hikvision", model: null, is_active: true, last_connection_status: "disconnected", enable_detection: true, username: null, password: null, notes: null },
-        { id: 4, camera_id: "cam_04", name: "Kho Hàng / Tầng 2", location: "Kho hàng", stream_url: "", protocol: "rtsp", resolution: null, fps: 30, brand: "Other", model: null, is_active: false, last_connection_status: "disconnected", enable_detection: false, username: null, password: null, notes: null },
-      ]);
+    } catch (err) {
+      console.warn("Failed to fetch cameras:", err);
+      setCameras([]);
     }
   }, []);
 

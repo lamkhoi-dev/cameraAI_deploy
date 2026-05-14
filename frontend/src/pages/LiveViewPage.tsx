@@ -35,15 +35,11 @@ export default function LiveViewPage() {
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      const list = res.data.data || res.data;
+      const list = res.data.cameras || res.data.data || res.data;
       setCameras(Array.isArray(list) ? list : []);
-    } catch {
-      setCameras([
-        { id: 1, camera_id: "cam_01", name: "Sảnh A / Tầng 1", location: "Sảnh A", stream_url: "rtsp://localhost:8554/cam_01", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
-        { id: 2, camera_id: "cam_02", name: "Bãi xe B1", location: "Bãi xe", stream_url: "rtsp://localhost:8554/cam_02", is_active: true, last_connection_status: "connected", enable_detection: true, resolution: "1920x1080", fps: 30 },
-        { id: 3, camera_id: "cam_03", name: "Hành lang C", location: "Hành lang", stream_url: "rtsp://localhost:8554/cam_03", is_active: true, last_connection_status: "disconnected", enable_detection: false, resolution: "1920x1080", fps: 30 },
-        { id: 4, camera_id: "cam_04", name: "Kho Hàng / Tầng 2", location: "Kho hàng", stream_url: "rtsp://localhost:8554/cam_04", is_active: false, last_connection_status: "disconnected", enable_detection: false, resolution: null, fps: 30 },
-      ]);
+    } catch (err) {
+      console.warn("Failed to fetch cameras:", err);
+      setCameras([]);
     }
   }, []);
 
