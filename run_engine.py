@@ -27,6 +27,11 @@ MAX_CAMERAS = int(os.getenv("MAX_CAMERAS", "15"))
 SKIP_FRAMES = int(os.getenv("SKIP_FRAMES", "3"))
 CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.5"))
 HEARTBEAT_INTERVAL = 30
+ADMIN_USER = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin123")
+
+# Global JWT token
+_jwt_token = ""
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -72,10 +77,30 @@ def load_models():
     return models
 
 
+def login():
+    """Login to backend and get JWT token."""
+    global _jwt_token
+    try:
+        r = httpx.post(f"{BACKEND_URL}/api/auth/login", json={
+            "username": ADMIN_USER, "password": ADMIN_PASS
+        }, timeout=10)
+        r.raise_for_status()
+        _jwt_token = r.json().get("access_token", "")
+        log.info(f"✓ Authenticated as {ADMIN_USER}")
+        return True
+    except Exception as e:
+        log.error(f"✗ Login failed: {e}")
+        return False
+
+
+def _auth_headers():
+    return {"Authorization": f"Bearer {_jwt_token}"} if _jwt_token else {}
+
+
 def fetch_cameras():
     """Fetch active cameras from backend API."""
     try:
-        r = httpx.get(f"{BACKEND_URL}/api/cameras", timeout=10)
+        r = httpx.get(f"{BACKEND_URL}/api/cameras", headers=_auth_headers(), timeout=10)
         r.raise_for_status()
         data = r.json()
         cameras = data.get("data", data.get("cameras", data.get("items", [])))
@@ -248,6 +273,13 @@ def main():
 
     # Load models
     models = load_models()
+
+    # Authenticate with backend
+    for attempt in range(5):
+        if login():
+            break
+        log.warning(f"Login attempt {attempt+1}/5 failed, retrying in 10s...")
+        time.sleep(10)
 
     # Fetch cameras
     cameras = fetch_cameras()
