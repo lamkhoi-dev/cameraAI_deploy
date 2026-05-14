@@ -112,7 +112,7 @@ def fetch_cameras():
         return []
 
 
-def push_results(camera_id: str, persons: list, vehicles: list):
+def push_results(camera_id: str, frame_index: int, persons: list, vehicles: list):
     """Push detection results to backend API."""
     ts = datetime.now(timezone.utc).isoformat()
 
@@ -121,7 +121,7 @@ def push_results(camera_id: str, persons: list, vehicles: list):
             if persons:
                 client.post(f"{BACKEND_URL}/api/ai/persons", json={
                     "camera_id": camera_id,
-                    "frame_index": 0,
+                    "frame_index": frame_index,
                     "timestamp": ts,
                     "persons": persons,
                 })
@@ -129,7 +129,7 @@ def push_results(camera_id: str, persons: list, vehicles: list):
             if vehicles:
                 client.post(f"{BACKEND_URL}/api/ai/vehicles", json={
                     "camera_id": camera_id,
-                    "frame_index": 0,
+                    "frame_index": frame_index,
                     "timestamp": ts,
                     "vehicles": vehicles,
                 })
@@ -244,7 +244,7 @@ def process_camera(camera: dict, models: dict):
             # Push results (throttle: max once per second)
             now = time.time()
             if (persons or vehicles) and (now - last_push) >= 1.0:
-                push_results(cam_id, persons, vehicles)
+                push_results(cam_id, frame_count, persons, vehicles)
                 last_push = now
 
             # FPS logging
