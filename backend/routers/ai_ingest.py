@@ -37,7 +37,7 @@ async def ingest_persons(data: PersonResultPayload, db: AsyncSession = Depends(g
     saved = []
     for p in data.persons:
         person = Person(
-            person_id=f"p_{data.camera_id}_{data.frame_index}_{p.track_id or uuid.uuid4().hex[:6]}",
+            person_id=f"p_{data.camera_id}_{uuid.uuid4().hex[:8]}",
             camera_id=data.camera_id,
             location=data.camera_id,
             timestamp=_naive_utc(data.timestamp),
@@ -70,7 +70,7 @@ async def ingest_vehicles(data: VehicleResultPayload, db: AsyncSession = Depends
     saved = []
     for v in data.vehicles:
         vehicle = Vehicle(
-            vehicle_id=f"v_{data.camera_id}_{data.frame_index}_{v.track_id or uuid.uuid4().hex[:6]}",
+            vehicle_id=f"v_{data.camera_id}_{uuid.uuid4().hex[:8]}",
             camera_id=data.camera_id,
             vehicle_type=v.vehicle_type,
             license_plate=v.license_plate,

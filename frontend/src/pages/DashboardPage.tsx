@@ -97,14 +97,10 @@ export default function DashboardPage() {
           }))
         );
       }
-    } catch {
-      // Demo stats when API unavailable
-      setStats({ total_persons: 247, total_vehicles: 183, active_alerts: 3, total_alerts: 15, recent_alerts: [] });
-      setAlerts([
-        { id: "1", type: "fire", title: "Phát hiện khói/lửa", source: "Cam 04 - Kho Hàng", time: "14:30" },
-        { id: "2", type: "intrusion", title: "Khu vực hạn chế", source: "Cam 01 - Sảnh A", time: "14:15" },
-        { id: "3", type: "info", title: "Hệ thống reboot", source: "Server 02", time: "12:00" },
-      ]);
+    } catch (err) {
+      console.warn("Stats fetch failed:", err);
+      setStats({ total_persons: 0, total_vehicles: 0, active_alerts: 0, total_alerts: 0, recent_alerts: [] });
+      setAlerts([]);
     }
   }, []);
 

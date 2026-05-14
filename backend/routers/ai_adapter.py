@@ -29,7 +29,7 @@ async def legacy_create_person(data: dict, db: AsyncSession = Depends(get_db)):
         person_id=data.get("person_id", f"p_{uuid.uuid4().hex[:8]}"),
         camera_id=data.get("video_source"),
         location=data.get("location"),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.utcnow(),
         image_path=data.get("image_path"),
         shirt_colors=data.get("shirt_colors"),
         pants_colors=data.get("pants_colors"),
@@ -61,7 +61,7 @@ async def legacy_create_vehicle(data: dict, db: AsyncSession = Depends(get_db)):
         license_plate=data.get("license_plate"),
         vehicle_colors=data.get("vehicle_colors"),
         location=data.get("location"),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.utcnow(),
         image_path=data.get("image_path"),
         confidence=data.get("confidence", 0.0),
         frame_index=data.get("frame_index"),
@@ -92,7 +92,7 @@ async def legacy_create_alert(data: dict, db: AsyncSession = Depends(get_db)):
         frame_index=data.get("frame_index"),
         image_path=data.get("image_path"),
         location=data.get("location"),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.utcnow(),
     )
     db.add(alert)
     await db.commit()
