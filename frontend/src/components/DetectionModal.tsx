@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { COLOR_MAP, cropUrl } from "@/lib/colors";
+import { cropUrl } from "@/lib/colors";
 import { Camera, Clock, Target, User, Car } from "lucide-react";
 
 interface ColorInfo {

@@ -235,7 +235,7 @@ export default function HistoryPage() {
           <Input placeholder="Tìm kiếm biển số..." value={search} onChange={(e) => setSearch(e.target.value)}
             className="pl-9 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500" />
         </div>
-        <Select value={cameraFilter} onValueChange={setCameraFilter}>
+        <Select value={cameraFilter} onValueChange={(v) => setCameraFilter(v ?? "all")}>
           <SelectTrigger className="w-[180px] bg-zinc-900 border-zinc-800 text-zinc-300">
             <SelectValue placeholder="Camera" />
           </SelectTrigger>
@@ -257,8 +257,8 @@ export default function HistoryPage() {
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar mode="range" selected={{ from: dateFrom, to: dateTo }}
-              onSelect={(range) => { setDateFrom(range?.from); setDateTo(range?.to); }}
-              numberOfMonths={1} locale={vi} />
+              onSelect={(range: { from?: Date; to?: Date } | undefined) => { setDateFrom(range?.from); setDateTo(range?.to); }}
+              locale={vi} />
           </PopoverContent>
         </Popover>
 
@@ -318,7 +318,7 @@ export default function HistoryPage() {
             <div className="flex gap-4 items-end flex-wrap">
               <div className="space-y-2">
                 <span className="text-xs text-zinc-500 uppercase tracking-wide">Loại xe</span>
-                <Select value={vehicleType} onValueChange={setVehicleType}>
+                <Select value={vehicleType} onValueChange={(v) => setVehicleType(v ?? "all")}>
                   <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700 text-zinc-300 h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
