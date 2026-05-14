@@ -76,8 +76,8 @@ except Exception as e:\n\
     sys.exit(1)\n\
 ' > /app/healthcheck.py
 
-# Set default command
-CMD ["python3", "main.py"]
+# Set default command — production multi-camera entry point
+CMD ["python3", "run_engine.py"]
 
 # Build instructions:
 # docker build -t camera-ai:latest .
