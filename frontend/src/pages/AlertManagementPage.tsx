@@ -19,7 +19,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-type AlertType = "fire" | "smoke" | "intrusion" | "suspicious" | "person" | "vehicle" | "info";
 type AlertStatus = "active" | "resolved";
 
 interface Alert {

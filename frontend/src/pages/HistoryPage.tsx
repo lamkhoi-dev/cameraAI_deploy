@@ -46,7 +46,7 @@ const typeConfig = {
 export default function HistoryPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [cameraFilter, setCameraFilter] = useState<string>("all");
+  const [cameraFilter, setCameraFilter] = useState<string | null>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [total, setTotal] = useState(0);
@@ -66,7 +66,7 @@ export default function HistoryPage() {
     try {
       const results: Detection[] = [];
       let totalCount = 0;
-      const camParam = cameraFilter !== "all" ? cameraFilter : undefined;
+      const camParam = cameraFilter && cameraFilter !== "all" ? cameraFilter : undefined;
 
       if (activeTab === "all" || activeTab === "person") {
         const res = await api.get("/persons", {
