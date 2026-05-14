@@ -1,6 +1,7 @@
 """
 AI Engine Entry Point — Production Multi-Camera Processing
 Fetches cameras from backend API, processes via go2rtc RTSP, pushes results back.
+Integrated with ai_engine processors: color analysis, OCR, fire detection.
 """
 
 import os
@@ -10,6 +11,7 @@ import signal
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -17,6 +19,12 @@ import torch
 import httpx
 from ultralytics import YOLO
 from datetime import datetime, timezone
+
+from ai_engine.utils.color_analyzer import ColorAnalyzer
+from ai_engine.config import (
+    NUM_COLORS_PERSON, NUM_COLORS_VEHICLE, VEHICLE_CLASSES as AI_VEHICLE_CLASSES,
+    CROPPED_DATA_DIR,
+)
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://cam-backend:8001")
@@ -29,6 +37,9 @@ CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.5"))
 HEARTBEAT_INTERVAL = 30
 ADMIN_USER = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin123")
+
+# OCR toggle (disable if PaddleOCR not available)
+USE_OCR = os.getenv("USE_OCR", "true").lower() == "true"
 
 # Global JWT token
 _jwt_token = ""
@@ -51,6 +62,29 @@ def handle_signal(sig, frame):
 
 signal.signal(signal.SIGTERM, handle_signal)
 signal.signal(signal.SIGINT, handle_signal)
+
+# Color analyzers (shared across threads, thread-safe since they create new arrays)
+person_color_analyzer = ColorAnalyzer(num_colors=NUM_COLORS_PERSON)
+vehicle_color_analyzer = ColorAnalyzer(num_colors=NUM_COLORS_VEHICLE)
+
+# Plate reader (lazy init, optional)
+plate_reader = None
+
+
+def init_plate_reader():
+    """Initialize PaddleOCR plate reader if available."""
+    global plate_reader
+    if not USE_OCR:
+        log.info("⏩ OCR disabled via USE_OCR=false")
+        return
+    try:
+        from ai_engine.utils.plate_reader import PlateReader
+        plate_reader = PlateReader(use_gpu=False)
+        log.info("✓ PaddleOCR plate reader initialized (CPU mode)")
+    except ImportError:
+        log.warning("⚠ PaddleOCR not installed — license plate OCR disabled")
+    except Exception as e:
+        log.warning(f"⚠ Plate reader init failed: {e}")
 
 
 def load_models():
@@ -117,7 +151,7 @@ def push_results(camera_id: str, frame_index: int, persons: list, vehicles: list
     ts = datetime.now(timezone.utc).isoformat()
 
     try:
-        with httpx.Client(timeout=10) as client:
+        with httpx.Client(timeout=10, headers=_auth_headers()) as client:
             if persons:
                 client.post(f"{BACKEND_URL}/api/ai/persons", json={
                     "camera_id": camera_id,
@@ -145,14 +179,97 @@ def push_heartbeat(camera_ids: list):
             "cameras_processing": camera_ids,
             "fps_avg": 0,
             "gpu_usage_percent": 0,
-            "models_loaded": ["yolo-pose", "yolo-object"],
-        }, timeout=5)
+            "models_loaded": ["yolo-pose", "yolo-object", "color-analyzer", "plate-ocr"],
+        }, headers=_auth_headers(), timeout=5)
     except Exception:
         pass
 
 
 # COCO vehicle class IDs
 VEHICLE_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+
+
+def _crop_region(frame: np.ndarray, bbox: list) -> np.ndarray | None:
+    """Safely crop a bounding box region from a frame."""
+    x1, y1, x2, y2 = bbox
+    h, w = frame.shape[:2]
+    x1 = max(0, min(x1, w))
+    x2 = max(0, min(x2, w))
+    y1 = max(0, min(y1, h))
+    y2 = max(0, min(y2, h))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return frame[y1:y2, x1:x2]
+
+
+def _format_colors(color_list: list | None) -> list:
+    """Convert ColorAnalyzer output to JSON-serializable format."""
+    if not color_list:
+        return []
+    return [{"name": c["name"], "rgb": list(c["rgb"])} for c in color_list]
+
+
+def _analyze_person_attributes(frame: np.ndarray, bbox: list) -> dict:
+    """Analyze person attributes: crop image, detect clothing colors."""
+    crop = _crop_region(frame, bbox)
+    if crop is None or crop.size == 0:
+        return {}
+
+    h, w = crop.shape[:2]
+    if h < 20 or w < 10:
+        return {}
+
+    attributes = {}
+
+    # Upper body (shirt) — top 50%
+    upper = crop[:int(h * 0.5), :]
+    shirt_colors = person_color_analyzer.analyze(upper, "shirt")
+    attributes["shirt_colors"] = _format_colors(shirt_colors)
+
+    # Lower body (pants) — bottom 50%
+    lower = crop[int(h * 0.5):, :]
+    pants_colors = person_color_analyzer.analyze(lower, "pants")
+    attributes["pants_colors"] = _format_colors(pants_colors)
+
+    # Head (hair) — top 25%
+    head = crop[:int(h * 0.25), :]
+    hair_colors = person_color_analyzer.analyze(head, "hair")
+    attributes["hair_colors"] = _format_colors(hair_colors)
+
+    return attributes
+
+
+def _analyze_vehicle(frame: np.ndarray, bbox: list, vehicle_type: str) -> tuple:
+    """Analyze vehicle: color + license plate OCR."""
+    crop = _crop_region(frame, bbox)
+    if crop is None or crop.size == 0:
+        return [], None
+
+    # Color analysis
+    colors = vehicle_color_analyzer.analyze(crop, vehicle_type)
+    formatted_colors = _format_colors(colors)
+
+    # License plate OCR (only for car/truck/bus)
+    plate_info = None
+    if plate_reader and vehicle_type in ("car", "truck", "bus"):
+        try:
+            plate_info = plate_reader.read_plate(crop)
+        except Exception:
+            pass
+
+    return formatted_colors, plate_info
+
+
+def _save_crop(crop_img: np.ndarray, category: str, identifier: str) -> str:
+    """Save cropped detection image to disk."""
+    try:
+        save_dir = CROPPED_DATA_DIR / category
+        save_dir.mkdir(parents=True, exist_ok=True)
+        path = save_dir / f"{identifier}.jpg"
+        cv2.imwrite(str(path), crop_img)
+        return str(path)
+    except Exception:
+        return ""
 
 
 def process_camera(camera: dict, models: dict):
@@ -199,7 +316,7 @@ def process_camera(camera: dict, models: dict):
             persons = []
             vehicles = []
 
-            # Person detection
+            # Person detection + attribute analysis
             try:
                 pose_results = models["pose"].track(
                     small, persist=True, conf=CONF_THRESHOLD, verbose=False
@@ -210,16 +327,29 @@ def process_camera(camera: dict, models: dict):
                         track_id = int(box.id) if box.id is not None else -1
                         if conf >= CONF_THRESHOLD and track_id >= 0:
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
+
+                            # Analyze attributes (colors) on the ORIGINAL frame
+                            # Scale bbox back to original frame size
+                            orig_bbox = [b * 2 for b in bbox]
+                            attributes = _analyze_person_attributes(frame, orig_bbox)
+
+                            # Save crop
+                            crop = _crop_region(frame, orig_bbox)
+                            crop_path = ""
+                            if crop is not None:
+                                crop_path = _save_crop(crop, "persons", f"{cam_id}_p{track_id}_{frame_count}")
+
                             persons.append({
                                 "track_id": track_id,
                                 "confidence": round(conf, 3),
-                                "bbox": bbox,
-                                "attributes": {},
+                                "bbox": orig_bbox,
+                                "attributes": attributes,
+                                "crop_path": crop_path,
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Pose error: {e}")
 
-            # Vehicle detection
+            # Vehicle detection + color + OCR
             try:
                 obj_results = models["object"].predict(
                     small, conf=CONF_THRESHOLD, verbose=False
@@ -230,13 +360,28 @@ def process_camera(camera: dict, models: dict):
                         if cls_id in VEHICLE_CLASSES:
                             conf = float(box.conf)
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
+                            vehicle_type = VEHICLE_CLASSES[cls_id]
+
+                            # Scale bbox back to original frame size
+                            orig_bbox = [b * 2 for b in bbox]
+
+                            # Analyze color + OCR on original frame
+                            colors, plate_info = _analyze_vehicle(frame, orig_bbox, vehicle_type)
+
+                            # Save crop
+                            crop = _crop_region(frame, orig_bbox)
+                            crop_path = ""
+                            if crop is not None:
+                                crop_path = _save_crop(crop, "vehicles", f"{cam_id}_v{cls_id}_{frame_count}")
+
                             vehicles.append({
                                 "track_id": -1,
-                                "vehicle_type": VEHICLE_CLASSES[cls_id],
+                                "vehicle_type": vehicle_type,
                                 "confidence": round(conf, 3),
-                                "bbox": bbox,
-                                "license_plate": None,
-                                "colors": [],
+                                "bbox": orig_bbox,
+                                "license_plate": plate_info.get("text") if plate_info else None,
+                                "colors": colors,
+                                "crop_path": crop_path,
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Object error: {e}")
@@ -269,10 +414,14 @@ def process_camera(camera: dict, models: dict):
 def main():
     log.info("=" * 60)
     log.info("🚀 AI Engine — Multi-Camera Production Mode")
+    log.info("   + Color Analysis | + License Plate OCR")
     log.info("=" * 60)
 
     # Load models
     models = load_models()
+
+    # Initialize plate reader (optional)
+    init_plate_reader()
 
     # Authenticate with backend
     for attempt in range(5):

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { CameraTile } from "@/components/CameraTile";
@@ -15,7 +15,7 @@ import {
   Flame,
 } from "lucide-react";
 import api from "@/api/client";
-import { useSocket } from "@/hooks/useSocket";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 // Same-origin proxy via nginx — no cross-origin issues
 const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
@@ -53,20 +53,15 @@ export default function DashboardPage() {
     fire: false,
   });
 
-  // Socket.IO: real-time events
-  const socketEvents = useMemo(
-    () => ({
-      new_alert: (data: unknown) => {
-        const alert = data as AlertItemData;
-        setAlerts((prev) => [alert, ...prev].slice(0, 20));
-      },
-    }),
-    []
-  );
-
-  useSocket({
-    rooms: ["alerts", "persons", "vehicles"],
-    events: socketEvents,
+  // WebSocket: real-time events
+  useWebSocket({
+    url: `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/ws`,
+    onMessage: (data) => {
+      const msg = data as { type?: string; payload?: AlertItemData };
+      if (msg.type === "new_alert" && msg.payload) {
+        setAlerts((prev) => [msg.payload!, ...prev].slice(0, 20));
+      }
+    },
   });
 
   const fetchCameras = useCallback(async () => {
