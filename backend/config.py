@@ -6,7 +6,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:changeme@localhost:5432/ai_detection"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@cam-postgres:5432/camera_db"
 
     # Auth
     secret_key: str = "dev-secret-key-change-in-production"
