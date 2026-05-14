@@ -15,6 +15,7 @@ class PersonDetection(BaseModel):
     confidence: float = 0.0
     bbox: list[int] = Field(default_factory=list)
     attributes: dict | None = None
+    image_path: str | None = None
     crop_image_base64: str | None = None
 
 
@@ -33,6 +34,7 @@ class VehicleDetection(BaseModel):
     confidence: float = 0.0
     bbox: list[int] = Field(default_factory=list)
     colors: list[ColorInfo] = Field(default_factory=list)
+    image_path: str | None = None
     crop_image_base64: str | None = None
 
 

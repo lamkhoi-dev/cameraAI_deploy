@@ -45,6 +45,7 @@ async def ingest_persons(data: PersonResultPayload, db: AsyncSession = Depends(g
             frame_index=data.frame_index,
             video_source=data.camera_id,
             track_id=p.track_id,
+            image_path=p.image_path,
             shirt_colors=p.attributes.get("shirt_colors") if p.attributes else None,
             pants_colors=p.attributes.get("pants_colors") if p.attributes else None,
             hair_colors=p.attributes.get("hair_colors") if p.attributes else None,
@@ -80,6 +81,7 @@ async def ingest_vehicles(data: VehicleResultPayload, db: AsyncSession = Depends
             frame_index=data.frame_index,
             video_source=data.camera_id,
             track_id=v.track_id,
+            image_path=v.image_path,
             vehicle_colors=[c.model_dump() for c in v.colors] if v.colors else None,
         )
         db.add(vehicle)

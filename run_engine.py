@@ -203,10 +203,10 @@ def _crop_region(frame: np.ndarray, bbox: list) -> np.ndarray | None:
 
 
 def _format_colors(color_list: list | None) -> list:
-    """Convert ColorAnalyzer output to JSON-serializable format."""
+    """Convert ColorAnalyzer output to JSON-serializable format matching backend ColorInfo schema."""
     if not color_list:
         return []
-    return [{"name": c["name"], "rgb": list(c["rgb"])} for c in color_list]
+    return [{"rank": c.get("rank", i+1), "name": c["name"], "rgb": list(c["rgb"])} for i, c in enumerate(color_list)]
 
 
 def _analyze_person_attributes(frame: np.ndarray, bbox: list) -> dict:
@@ -333,6 +333,11 @@ def process_camera(camera: dict, models: dict):
                             orig_bbox = [b * 2 for b in bbox]
                             attributes = _analyze_person_attributes(frame, orig_bbox)
 
+                            if attributes:
+                                log.info(f"[{cam_id}] 🎨 Person t{track_id} attrs: shirt={attributes.get('shirt_colors', [])[:1]}")
+                            else:
+                                log.info(f"[{cam_id}] ⚠ Person t{track_id} bbox={orig_bbox} — attrs empty (too small?)")
+
                             # Save crop
                             crop = _crop_region(frame, orig_bbox)
                             crop_path = ""
@@ -343,8 +348,8 @@ def process_camera(camera: dict, models: dict):
                                 "track_id": track_id,
                                 "confidence": round(conf, 3),
                                 "bbox": orig_bbox,
-                                "attributes": attributes,
-                                "crop_path": crop_path,
+                                "attributes": attributes if attributes else None,
+                                "image_path": crop_path,
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Pose error: {e}")
@@ -381,7 +386,7 @@ def process_camera(camera: dict, models: dict):
                                 "bbox": orig_bbox,
                                 "license_plate": plate_info.get("text") if plate_info else None,
                                 "colors": colors,
-                                "crop_path": crop_path,
+                                "image_path": crop_path,
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Object error: {e}")
