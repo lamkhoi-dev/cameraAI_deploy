@@ -344,9 +344,6 @@ def process_camera(camera: dict, models: dict):
             # Use full resolution frame (no resize)
             proc_frame = frame
 
-            # Save full frame (rate-limited, only when FULL_FRAME_MODE=true)
-            full_frame_path = _save_full_frame(frame, cam_id, frame_count)
-
             persons = []
             vehicles = []
 
@@ -380,10 +377,7 @@ def process_camera(camera: dict, models: dict):
                                 "track_id": track_id,
                                 "confidence": round(conf, 3),
                                 "bbox": bbox,
-                                "attributes": {
-                                    **(attributes or {}),
-                                    **(({"full_frame_path": full_frame_path} if full_frame_path else {})),
-                                } or None,
+                                "attributes": attributes or {},
                                 "image_path": crop_path,
                             })
             except Exception as e:
@@ -402,8 +396,6 @@ def process_camera(camera: dict, models: dict):
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
                             vehicle_type = VEHICLE_CLASSES[cls_id]
 
-                            # Use bbox directly (full-res, no scaling needed)
-
                             # Analyze color + OCR on original frame
                             colors, plate_info = _analyze_vehicle(frame, bbox, vehicle_type)
 
@@ -421,10 +413,23 @@ def process_camera(camera: dict, models: dict):
                                 "license_plate": plate_info.get("text") if plate_info else None,
                                 "colors": colors,
                                 "image_path": crop_path,
-                                "attributes": ({"full_frame_path": full_frame_path} if full_frame_path else None),
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Object error: {e}")
+
+            # Save full frame ONLY when detections exist — guarantees bbox-frame sync
+            if persons or vehicles:
+                full_frame_path = _save_full_frame(frame, cam_id, frame_count)
+
+                # Attach full_frame_path to all detections from THIS frame
+                if full_frame_path:
+                    for p in persons:
+                        p["attributes"]["full_frame_path"] = full_frame_path
+                    for v in vehicles:
+                        if v.get("attributes"):
+                            v["attributes"]["full_frame_path"] = full_frame_path
+                        else:
+                            v["attributes"] = {"full_frame_path": full_frame_path}
 
             # Push results (throttle: max once per second)
             now = time.time()
