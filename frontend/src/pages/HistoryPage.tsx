@@ -165,7 +165,7 @@ export default function HistoryPage() {
           confidence: Number(p.confidence) || 0,
           track_id: p.track_id as number | undefined,
           image_path: p.image_path as string | undefined,
-          full_frame_path: (p.attributes as Record<string, unknown>)?.full_frame_path as string | undefined,
+          full_frame_path: p.full_frame_path as string | undefined,
           bbox: p.bbox as number[] | undefined,
           shirt_colors: p.shirt_colors as ColorInfo[] | undefined,
           pants_colors: p.pants_colors as ColorInfo[] | undefined,
