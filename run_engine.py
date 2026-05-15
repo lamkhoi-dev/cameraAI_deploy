@@ -279,13 +279,14 @@ def _save_crop(crop_img: np.ndarray, category: str, identifier: str) -> str:
 
 
 def _save_full_frame(frame: np.ndarray, cam_id: str, frame_count: int) -> str:
-    """Save full camera frame (rate-limited). Returns relative path for URL serving."""
+    """Save full camera frame (rate-limited). Returns path ONLY when freshly saved
+    to guarantee bbox-frame alignment."""
     if not FULL_FRAME_MODE:
         return ""
     now = time.time()
     last = _last_full_frame.get(cam_id, {"ts": 0})
     if now - last["ts"] < FULL_FRAME_INTERVAL:
-        return last.get("path", "")
+        return ""  # Don't return stale path — bbox would mismatch
     try:
         save_dir = CROPPED_DATA_DIR / "full_frames"
         save_dir.mkdir(parents=True, exist_ok=True)
