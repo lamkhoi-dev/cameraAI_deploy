@@ -18,7 +18,7 @@ export function CameraTile({
   streamUrl,
   resolution = "1080P / 30FPS",
   protocol = "RTC",
-  aiTags = [],
+  aiTags: _aiTags = [],
   events,
 }: CameraTileProps) {
   const isOnline = status === "online";
