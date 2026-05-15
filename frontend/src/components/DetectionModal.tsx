@@ -1,7 +1,8 @@
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { cropUrl } from "@/lib/colors";
-import { Camera, Clock, Target, User, Car } from "lucide-react";
+import { Camera, Clock, Target, User, Car, X, ZoomIn } from "lucide-react";
 
 interface ColorInfo {
   rank: number;
@@ -58,30 +59,58 @@ export default function DetectionModal({
   const imgSrc = cropUrl(detection.image_path);
   const isPerson = detection.type === "person";
   const conf = Math.round(detection.confidence * 100);
+  const [zoomed, setZoomed] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setZoomed(false); };
+    if (zoomed) window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [zoomed]);
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md p-0 overflow-hidden">
-        <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2">
-            {isPerson ? <User className="h-5 w-5 text-blue-400" /> : <Car className="h-5 w-5 text-emerald-400" />}
-            Chi tiết {isPerson ? "Người" : "Phương tiện"}
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Image — natural aspect ratio, max height constrained */}
-        <div className="bg-zinc-950 flex items-center justify-center border-y border-zinc-800 min-h-[120px] max-h-[400px]">
-          {imgSrc ? (
-            <img
-              src={imgSrc}
-              alt="Crop"
-              className="max-w-full max-h-[400px] object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : (
-            <div className="py-12 text-zinc-600 text-sm">Không có ảnh</div>
-          )}
+    <>
+      {/* Zoom Lightbox */}
+      {zoomed && imgSrc && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center cursor-zoom-out"
+          onClick={() => setZoomed(false)}
+        >
+          <button onClick={() => setZoomed(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors z-10">
+            <X className="h-6 w-6" />
+          </button>
+          <img src={imgSrc} alt="Zoom" className="max-w-[95vw] max-h-[95vh] object-contain" />
         </div>
+      )}
+
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md p-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2">
+              {isPerson ? <User className="h-5 w-5 text-blue-400" /> : <Car className="h-5 w-5 text-emerald-400" />}
+              Chi tiết {isPerson ? "Người" : "Phương tiện"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Image — clickable to zoom */}
+          <div className="bg-zinc-950 flex items-center justify-center border-y border-zinc-800 min-h-[120px] max-h-[400px] relative group">
+            {imgSrc ? (
+              <>
+                <img
+                  src={imgSrc}
+                  alt="Crop"
+                  className="max-w-full max-h-[400px] object-contain cursor-zoom-in"
+                  onClick={() => setZoomed(true)}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded-md px-2 py-1 flex items-center gap-1 pointer-events-none">
+                  <ZoomIn className="h-3 w-3 text-zinc-400" />
+                  <span className="text-[10px] text-zinc-400">Click để phóng to</span>
+                </div>
+              </>
+            ) : (
+              <div className="py-12 text-zinc-600 text-sm">Không có ảnh</div>
+            )}
+          </div>
 
         {/* Info grid */}
         <div className="p-4 pt-3 space-y-3">
@@ -130,8 +159,9 @@ export default function DetectionModal({
             )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

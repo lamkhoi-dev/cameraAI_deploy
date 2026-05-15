@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/StatCard";
 import { CameraTile } from "@/components/CameraTile";
 import { AlertItem, type AlertItemData } from "@/components/AlertItem";
-import { Switch } from "@/components/ui/switch";
 import {
   Video,
   Users,
@@ -11,16 +10,13 @@ import {
   AlertTriangle,
   LayoutGrid,
   Rows3,
-  PersonStanding,
-  Flame,
+  Cpu,
 } from "lucide-react";
 import api from "@/api/client";
 import { useWebSocket } from "@/hooks/useWebSocket";
 
-// Same-origin proxy via nginx — no cross-origin issues
 const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
 
-// Backend Camera model shape
 interface BackendCamera {
   id: number;
   camera_id: string;
@@ -28,8 +24,10 @@ interface BackendCamera {
   location: string;
   stream_url: string;
   is_active: boolean;
-  last_connection_status: string;
-  enable_detection: boolean;
+  connection_status: string;
+  ai_detect_person: boolean;
+  ai_detect_vehicle: boolean;
+  ai_detect_fire: boolean;
   resolution: string | null;
   fps: number;
 }
@@ -47,19 +45,56 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [alerts, setAlerts] = useState<AlertItemData[]>([]);
   const [gridLayout, setGridLayout] = useState<"2x2" | "3x3">("2x2");
-  const [aiModules, setAiModules] = useState({
-    person: true,
-    vehicle: true,
-    fire: false,
-  });
+  const [cameraEvents, setCameraEvents] = useState<Record<string, { persons: number; vehicles: number }>>({});
 
-  // WebSocket: real-time events
+  // Track event counts per camera
+  const eventTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   useWebSocket({
     url: `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/ws`,
     onMessage: (data) => {
-      const msg = data as { type?: string; payload?: AlertItemData };
+      const msg = data as { type?: string; payload?: AlertItemData & { camera_id?: string; count?: number } };
+
       if (msg.type === "new_alert" && msg.payload) {
         setAlerts((prev) => [msg.payload!, ...prev].slice(0, 20));
+      }
+
+      if (msg.type === "new_person_detected" && msg.payload?.camera_id) {
+        const camId = msg.payload.camera_id;
+        setCameraEvents((prev) => ({
+          ...prev,
+          [camId]: {
+            persons: (prev[camId]?.persons || 0) + (msg.payload!.count || 1),
+            vehicles: prev[camId]?.vehicles || 0,
+          },
+        }));
+        clearTimeout(eventTimers.current[camId]);
+        eventTimers.current[camId] = setTimeout(() => {
+          setCameraEvents((prev) => {
+            const next = { ...prev };
+            delete next[camId];
+            return next;
+          });
+        }, 5000);
+      }
+
+      if (msg.type === "new_vehicle_detected" && msg.payload?.camera_id) {
+        const camId = msg.payload.camera_id;
+        setCameraEvents((prev) => ({
+          ...prev,
+          [camId]: {
+            persons: prev[camId]?.persons || 0,
+            vehicles: (prev[camId]?.vehicles || 0) + (msg.payload!.count || 1),
+          },
+        }));
+        clearTimeout(eventTimers.current[camId]);
+        eventTimers.current[camId] = setTimeout(() => {
+          setCameraEvents((prev) => {
+            const next = { ...prev };
+            delete next[camId];
+            return next;
+          });
+        }, 5000);
       }
     },
   });
@@ -67,7 +102,6 @@ export default function DashboardPage() {
   const fetchCameras = useCallback(async () => {
     try {
       const res = await api.get("/cameras");
-      // FastAPI returns { cameras: [...] }, Flask returns { data: [...] }
       const list = res.data.cameras || res.data.data || res.data;
       setCameras(Array.isArray(list) ? list : []);
     } catch (err) {
@@ -80,7 +114,6 @@ export default function DashboardPage() {
     try {
       const res = await api.get("/statistics");
       setStats(res.data);
-      // Map recent_alerts to AlertItemData
       if (res.data.recent_alerts) {
         setAlerts(
           res.data.recent_alerts.map((a: Record<string, string>) => ({
@@ -104,14 +137,14 @@ export default function DashboardPage() {
     fetchStats();
   }, [fetchCameras, fetchStats]);
 
-  // Map backend status to UI status
   const getStatus = (cam: BackendCamera): "online" | "offline" =>
-    cam.is_active && cam.last_connection_status === "connected" ? "online" : "offline";
+    cam.is_active && cam.connection_status === "connected" ? "online" : "offline";
 
   const getAiTags = (cam: BackendCamera): string[] =>
-    cam.enable_detection ? ["AI Active"] : [];
+    cam.ai_detect_person || cam.ai_detect_vehicle ? ["AI"] : [];
 
   const onlineCameras = cameras.filter((c) => getStatus(c) === "online").length;
+  const aiCameras = cameras.filter((c) => c.ai_detect_person || c.ai_detect_vehicle || c.ai_detect_fire).length;
   const cols = gridLayout === "2x2" ? "grid-cols-2" : "grid-cols-3";
   const displayCameras = gridLayout === "2x2" ? cameras.slice(0, 4) : cameras.slice(0, 9);
 
@@ -120,13 +153,18 @@ export default function DashboardPage() {
       {/* Left/Center Column */}
       <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-2 pb-6">
         {/* Stats Row */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <StatCard
             label="Camera Online"
             value={`${onlineCameras}/${cameras.length}`}
             icon={<Video className="h-5 w-5 text-blue-500" />}
-            trend={{ value: "1", up: true }}
             subtitle="Đang hoạt động"
+          />
+          <StatCard
+            label="AI Tracking"
+            value={`${aiCameras}/${cameras.length}`}
+            icon={<Cpu className="h-5 w-5 text-emerald-500" />}
+            subtitle="Đang xử lý AI"
           />
           <StatCard
             label="Người phát hiện"
@@ -177,7 +215,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Camera Grid */}
-        <div className={`grid ${cols} gap-4 flex-1 min-h-[400px]`}>
+        <div className={`grid ${cols} gap-3 flex-1`}>
           {displayCameras.map((cam) => (
             <CameraTile
               key={cam.camera_id}
@@ -190,15 +228,15 @@ export default function DashboardPage() {
               }
               resolution={cam.resolution || "1080P / 30FPS"}
               aiTags={getAiTags(cam)}
+              events={cameraEvents[cam.camera_id]}
             />
           ))}
         </div>
       </div>
 
-      {/* Right Panel */}
+      {/* Right Panel — Alerts only */}
       <div className="w-[300px] flex flex-col gap-6 flex-shrink-0">
-        {/* Alert Feed */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg flex flex-col h-[55%] overflow-hidden">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg flex flex-col flex-1 overflow-hidden">
           <div className="px-4 py-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
             <h3 className="text-sm font-semibold text-white">Cảnh báo gần đây</h3>
           </div>
@@ -206,45 +244,11 @@ export default function DashboardPage() {
             {alerts.map((alert) => (
               <AlertItem key={alert.id} alert={alert} />
             ))}
-          </div>
-        </div>
-
-        {/* AI Status Toggles */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg flex flex-col flex-1 overflow-hidden">
-          <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900">
-            <h3 className="text-sm font-semibold text-white">Module AI</h3>
-          </div>
-          <div className="p-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <PersonStanding className="h-5 w-5 text-zinc-400" />
-                <span className="text-sm text-zinc-200">Nhận diện người</span>
+            {alerts.length === 0 && (
+              <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm py-8">
+                Không có cảnh báo
               </div>
-              <Switch
-                checked={aiModules.person}
-                onCheckedChange={(v) => setAiModules((s) => ({ ...s, person: v }))}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Car className="h-5 w-5 text-zinc-400" />
-                <span className="text-sm text-zinc-200">Nhận diện xe</span>
-              </div>
-              <Switch
-                checked={aiModules.vehicle}
-                onCheckedChange={(v) => setAiModules((s) => ({ ...s, vehicle: v }))}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Flame className="h-5 w-5 text-zinc-400" />
-                <span className="text-sm text-zinc-200">Phát hiện lửa/khói</span>
-              </div>
-              <Switch
-                checked={aiModules.fire}
-                onCheckedChange={(v) => setAiModules((s) => ({ ...s, fire: v }))}
-              />
-            </div>
+            )}
           </div>
         </div>
       </div>

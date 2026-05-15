@@ -7,6 +7,7 @@ import LiveViewPage from "@/pages/LiveViewPage";
 import CameraManagementPage from "@/pages/CameraManagementPage";
 import AlertManagementPage from "@/pages/AlertManagementPage";
 import HistoryPage from "@/pages/HistoryPage";
+import SettingsPage from "@/pages/SettingsPage";
 import { type ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="/cameras" element={<CameraManagementPage />} />
         <Route path="/alerts" element={<AlertManagementPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
