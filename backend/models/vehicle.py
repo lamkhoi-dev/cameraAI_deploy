@@ -21,6 +21,8 @@ class Vehicle(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    full_frame_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    bbox: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     frame_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -47,6 +49,8 @@ class Vehicle(Base):
             "location": self.location,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "image_path": self.image_path,
+            "full_frame_path": self.full_frame_path,
+            "bbox": self.bbox,
             "confidence": self.confidence,
             "frame_index": self.frame_index,
             "video_source": self.video_source,

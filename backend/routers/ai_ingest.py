@@ -46,6 +46,8 @@ async def ingest_persons(data: PersonResultPayload, db: AsyncSession = Depends(g
             video_source=data.camera_id,
             track_id=p.track_id,
             image_path=p.image_path,
+            full_frame_path=p.attributes.get("full_frame_path") if p.attributes else None,
+            bbox=p.attributes.get("bbox") or (p.bbox if hasattr(p, 'bbox') else None),
             shirt_colors=p.attributes.get("shirt_colors") if p.attributes else None,
             pants_colors=p.attributes.get("pants_colors") if p.attributes else None,
             hair_colors=p.attributes.get("hair_colors") if p.attributes else None,
@@ -82,6 +84,8 @@ async def ingest_vehicles(data: VehicleResultPayload, db: AsyncSession = Depends
             video_source=data.camera_id,
             track_id=v.track_id,
             image_path=v.image_path,
+            full_frame_path=v.attributes.get("full_frame_path") if v.attributes else None,
+            bbox=v.bbox or None,
             vehicle_colors=[c.model_dump() for c in v.colors] if v.colors else None,
         )
         db.add(vehicle)

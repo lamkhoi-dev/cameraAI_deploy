@@ -17,6 +17,8 @@ class Person(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    full_frame_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    bbox: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Clothing colors (JSON array)
     shirt_colors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -45,6 +47,8 @@ class Person(Base):
             "location": self.location,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "image_path": self.image_path,
+            "full_frame_path": self.full_frame_path,
+            "bbox": self.bbox,
             "shirt_colors": self.shirt_colors or [],
             "pants_colors": self.pants_colors or [],
             "hair_colors": self.hair_colors or [],

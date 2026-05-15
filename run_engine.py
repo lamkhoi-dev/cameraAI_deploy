@@ -419,7 +419,7 @@ def process_camera(camera: dict, models: dict):
                                 "license_plate": plate_info.get("text") if plate_info else None,
                                 "colors": colors,
                                 "image_path": crop_path,
-                                "full_frame_path": full_frame_path or None,
+                                "attributes": ({"full_frame_path": full_frame_path} if full_frame_path else None),
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Object error: {e}")
