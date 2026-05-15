@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { cropUrl } from "@/lib/colors";
 import { formatVN } from "@/lib/date";
-import { Camera, Clock, Target, User, Car, X, ZoomIn, Image, Maximize2 } from "lucide-react";
+import { Camera, Clock, Target, User, Car, X, ZoomIn, Maximize2 } from "lucide-react";
 
 interface ColorInfo {
   rank: number;
