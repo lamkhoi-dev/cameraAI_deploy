@@ -435,7 +435,7 @@ export default function HistoryPage() {
                           <Camera className="h-3.5 w-3.5 text-zinc-500" /> {det.camera}
                         </div>
                       </TableCell>
-                      <TableCell className="text-zinc-400 text-sm font-mono">{det.timestamp}</TableCell>
+                      <TableCell className="text-zinc-400 text-sm font-mono">{formatVN(det.timestamp)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 items-center flex-wrap">
                           {colors.slice(0, 3).map((c, i) => (
