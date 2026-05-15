@@ -34,6 +34,7 @@ API_KEY = os.getenv("API_KEY", "")
 MAX_CAMERAS = int(os.getenv("MAX_CAMERAS", "12"))
 SKIP_FRAMES = int(os.getenv("SKIP_FRAMES", "3"))
 CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.5"))
+PERSON_CONF_THRESHOLD = float(os.getenv("PERSON_CONF_THRESHOLD", "0.3"))
 HEARTBEAT_INTERVAL = 30
 ADMIN_USER = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin123")
@@ -351,13 +352,13 @@ def process_camera(camera: dict, models: dict):
             # Person detection + attribute analysis
             try:
                 pose_results = models["pose"].track(
-                    proc_frame, persist=True, conf=CONF_THRESHOLD, verbose=False
+                    proc_frame, persist=True, conf=PERSON_CONF_THRESHOLD, verbose=False
                 )
                 if pose_results and pose_results[0].boxes:
                     for box in pose_results[0].boxes:
                         conf = float(box.conf)
                         track_id = int(box.id) if box.id is not None else -1
-                        if conf >= CONF_THRESHOLD and track_id >= 0:
+                        if conf >= PERSON_CONF_THRESHOLD and track_id >= 0:
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
 
                             # Analyze attributes (colors) on the full-res frame
