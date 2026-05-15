@@ -165,16 +165,25 @@ export default function SettingsPage() {
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium text-center">Trạng thái</span>
             </div>
 
-            {cameras.map((cam) => (
+            {[...cameras]
+              .sort((a, b) => (hasAnyAI(b) ? 1 : 0) - (hasAnyAI(a) ? 1 : 0))
+              .map((cam, idx) => {
+              const active = hasAnyAI(cam);
+              return (
               <div
                 key={cam.camera_id}
-                className="grid grid-cols-[1fr_80px_80px_80px_100px] gap-4 px-4 py-3 items-center hover:bg-zinc-800/30 transition-colors"
+                className={`grid grid-cols-[1fr_80px_80px_80px_100px] gap-4 px-4 py-3 items-center transition-colors border-l-[3px] ${
+                  active
+                    ? "border-l-emerald-500 bg-emerald-500/[0.03] hover:bg-emerald-500/[0.06]"
+                    : "border-l-transparent hover:bg-zinc-800/30"
+                }`}
               >
                 {/* Camera info */}
                 <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-[10px] text-zinc-600 font-mono w-4 text-right flex-shrink-0">{idx + 1}</span>
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cam.is_active ? "bg-emerald-500" : "bg-zinc-600"}`} />
                   <div className="min-w-0">
-                    <p className="text-sm text-zinc-200 font-medium truncate">{cam.name}</p>
+                    <p className={`text-sm font-medium truncate ${active ? "text-zinc-100" : "text-zinc-400"}`}>{cam.name}</p>
                     <p className="text-[11px] text-zinc-500 truncate flex items-center gap-1">
                       <MapPin className="h-3 w-3 inline" /> {cam.location}
                     </p>
@@ -214,7 +223,7 @@ export default function SettingsPage() {
                     <Loader2 className="h-4 w-4 text-zinc-500 animate-spin" />
                   ) : saved === cam.camera_id ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  ) : hasAnyAI(cam) ? (
+                  ) : active ? (
                     <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">
                       AI Active
                     </Badge>
@@ -225,7 +234,8 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
