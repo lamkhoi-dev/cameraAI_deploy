@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { cropUrl } from "@/lib/colors";
 import { formatVN } from "@/lib/date";
-import { Camera, Clock, Target, User, Car, X, ZoomIn, Maximize2 } from "lucide-react";
+import { Camera, Clock, Target, User, Car, ZoomIn, Maximize2 } from "lucide-react";
 
 interface ColorInfo {
   rank: number;
@@ -49,7 +49,7 @@ function ColorDots({ label, colors }: { label: string; colors?: ColorInfo[] }) {
   );
 }
 
-/** Annotation viewer: full-frame with bbox overlay + hover magnifier on bbox */
+/** Annotation viewer: full-frame with bbox overlay + hover magnifier */
 function AnnotationViewer({
   fullSrc,
   cropSrc,
@@ -63,21 +63,21 @@ function AnnotationViewer({
   isPerson: boolean;
   confidence: number;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgNat, setImgNat] = useState({ w: 0, h: 0 });
-  const [hoverBbox, setHoverBbox] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const [magnifier, setMagnifier] = useState<{ x: number; y: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const MAGNIFIER_SIZE = 200;
-  const MAGNIFIER_ZOOM = 3;
+  const MAGNIFIER_SIZE = 220;
+  const MAGNIFIER_ZOOM = 3.5;
 
   const onImgLoad = useCallback(() => {
     if (!imgRef.current) return;
     setImgNat({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight });
   }, []);
 
-  // Compute bbox position in CSS % relative to the image natural size
+  // Compute bbox position as CSS % relative to image natural size
   const getBboxStyle = (): React.CSSProperties | null => {
     if (!bbox || bbox.length < 4 || !imgNat.w || !imgNat.h) return null;
     const [x1, y1, x2, y2] = bbox;
@@ -90,18 +90,25 @@ function AnnotationViewer({
   };
 
   const bboxStyle = getBboxStyle();
-  const bboxColor = isPerson ? "rgba(59,130,246,0.8)" : "rgba(16,185,129,0.8)";
-  const bboxColorFill = isPerson ? "rgba(59,130,246,0.12)" : "rgba(16,185,129,0.12)";
+  const bboxColor = isPerson ? "rgba(59,130,246,0.85)" : "rgba(16,185,129,0.85)";
+  const bboxGlow = isPerson ? "rgba(59,130,246,0.15)" : "rgba(16,185,129,0.15)";
   const conf = Math.round(confidence * 100);
 
-  // Magnifier on bbox hover
+  // Delayed hover to prevent accidental trigger
+  const onBboxEnter = useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
+  }, []);
+
+  const onBboxLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setIsHovering(false);
+    setMagnifier(null);
+  }, []);
+
   const onBboxMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = imgRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setMagnifier({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    setMagnifier({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   }, []);
 
   const getMagnifierStyle = (): React.CSSProperties => {
@@ -122,15 +129,19 @@ function AnnotationViewer({
     };
   };
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); };
+  }, []);
+
   return (
-    <div ref={containerRef} className="relative bg-zinc-950 flex items-center justify-center select-none overflow-hidden">
-      {/* Full-frame image */}
-      <div className="relative inline-block">
+    <div className="relative bg-zinc-950 flex items-center justify-center select-none overflow-hidden">
+      <div className="relative inline-block w-full">
         <img
           ref={imgRef}
           src={fullSrc}
           alt="Full frame"
-          className="max-w-full max-h-[65vh] object-contain"
+          className="w-full max-h-[70vh] object-contain"
           onLoad={onImgLoad}
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           draggable={false}
@@ -139,55 +150,64 @@ function AnnotationViewer({
         {/* Bbox overlay */}
         {bboxStyle && (
           <div
-            className="absolute transition-all duration-150"
+            className="absolute transition-all duration-200 ease-out"
             style={{
               ...bboxStyle,
-              border: `2px solid ${bboxColor}`,
-              backgroundColor: hoverBbox ? bboxColorFill : "transparent",
-              boxShadow: hoverBbox ? `0 0 20px ${bboxColor}, inset 0 0 20px ${bboxColorFill}` : "none",
+              border: `2.5px solid ${bboxColor}`,
+              backgroundColor: isHovering ? bboxGlow : "transparent",
+              boxShadow: isHovering
+                ? `0 0 24px ${bboxColor}, inset 0 0 30px ${bboxGlow}`
+                : `0 0 0 1px ${bboxColor}`,
               cursor: "crosshair",
               zIndex: 10,
             }}
-            onMouseEnter={() => { setHoverBbox(true); }}
-            onMouseLeave={() => { setHoverBbox(false); setMagnifier(null); }}
+            onMouseEnter={onBboxEnter}
+            onMouseLeave={onBboxLeave}
             onMouseMove={onBboxMouseMove}
           >
-            {/* Label tag */}
+            {/* Label */}
             <div
-              className="absolute -top-6 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white whitespace-nowrap rounded-t"
+              className="absolute -top-6 left-0 px-2 py-0.5 text-[11px] font-bold text-white whitespace-nowrap rounded-t-sm"
               style={{ backgroundColor: bboxColor }}
             >
-              {isPerson ? "PERSON" : "VEHICLE"} {conf}%
+              {isPerson ? "👤 PERSON" : "🚗 VEHICLE"} · {conf}%
             </div>
 
             {/* Corner markers */}
-            <div className="absolute -top-[2px] -left-[2px] w-3 h-3 border-t-2 border-l-2" style={{ borderColor: bboxColor }} />
-            <div className="absolute -top-[2px] -right-[2px] w-3 h-3 border-t-2 border-r-2" style={{ borderColor: bboxColor }} />
-            <div className="absolute -bottom-[2px] -left-[2px] w-3 h-3 border-b-2 border-l-2" style={{ borderColor: bboxColor }} />
-            <div className="absolute -bottom-[2px] -right-[2px] w-3 h-3 border-b-2 border-r-2" style={{ borderColor: bboxColor }} />
+            {[
+              "-top-[2px] -left-[2px] border-t-[3px] border-l-[3px]",
+              "-top-[2px] -right-[2px] border-t-[3px] border-r-[3px]",
+              "-bottom-[2px] -left-[2px] border-b-[3px] border-l-[3px]",
+              "-bottom-[2px] -right-[2px] border-b-[3px] border-r-[3px]",
+            ].map((pos, i) => (
+              <div key={i} className={`absolute w-4 h-4 ${pos}`} style={{ borderColor: bboxColor }} />
+            ))}
           </div>
         )}
 
-        {/* Magnifier lens on bbox hover */}
-        {hoverBbox && magnifier && (
+        {/* Magnifier lens — only appears after hover delay */}
+        {isHovering && magnifier && (
           <div
-            className="absolute rounded-full border-2 border-white/70 shadow-2xl pointer-events-none z-50 overflow-hidden"
-            style={getMagnifierStyle()}
+            className="absolute rounded-full border-[3px] border-white/80 shadow-2xl pointer-events-none z-50 overflow-hidden"
+            style={{
+              ...getMagnifierStyle(),
+              boxShadow: "0 0 0 2px rgba(0,0,0,0.3), 0 8px 32px rgba(0,0,0,0.5)",
+            }}
           />
         )}
 
         {/* Hint */}
-        {bboxStyle && !hoverBbox && (
-          <div className="absolute bottom-2 right-2 opacity-70 bg-black/70 rounded-md px-2 py-1 flex items-center gap-1 pointer-events-none text-[10px] text-zinc-300 z-20">
-            <ZoomIn className="h-3 w-3" /> Rê chuột vào bbox để phóng to
+        {bboxStyle && !isHovering && (
+          <div className="absolute bottom-3 right-3 opacity-80 bg-black/80 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1.5 pointer-events-none text-[11px] text-zinc-200 z-20">
+            <ZoomIn className="h-3.5 w-3.5" /> Rê chuột vào khung để phóng to
           </div>
         )}
       </div>
 
-      {/* Crop thumbnail in corner */}
+      {/* Crop mini-thumbnail */}
       {cropSrc && (
-        <div className="absolute top-2 left-2 z-20">
-          <div className="w-16 h-20 rounded border border-zinc-600/50 overflow-hidden bg-zinc-900 shadow-lg">
+        <div className="absolute top-3 left-3 z-20">
+          <div className="w-14 h-18 rounded-lg border border-zinc-600/40 overflow-hidden bg-zinc-900/90 shadow-xl backdrop-blur-sm">
             <img src={cropSrc} alt="Crop" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </div>
           <div className="text-[8px] text-zinc-500 mt-0.5 text-center">Crop</div>
@@ -210,13 +230,7 @@ function CropViewer({ src }: { src: string }) {
   return (
     <>
       {zoomed && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center cursor-zoom-out"
-          onClick={() => setZoomed(false)}
-        >
-          <button onClick={() => setZoomed(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10">
-            <X className="h-6 w-6" />
-          </button>
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center cursor-zoom-out" onClick={() => setZoomed(false)}>
           <img src={src} alt="Zoom" className="max-w-[95vw] max-h-[95vh] object-contain" />
         </div>
       )}
@@ -257,7 +271,7 @@ export default function DetectionModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent
         className={`bg-zinc-900 border-zinc-800 text-zinc-100 p-0 overflow-hidden ${
-          hasFullFrame ? "max-w-4xl" : "max-w-lg"
+          hasFullFrame ? "sm:max-w-5xl" : "sm:max-w-lg"
         }`}
       >
         <DialogHeader className="p-4 pb-0">
@@ -265,7 +279,7 @@ export default function DetectionModal({
             {isPerson ? <User className="h-5 w-5 text-blue-400" /> : <Car className="h-5 w-5 text-emerald-400" />}
             Chi tiết {isPerson ? "Người" : "Phương tiện"}
             {hasFullFrame && (
-              <Badge className="ml-auto text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+              <Badge className="ml-auto text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                 <Maximize2 className="h-3 w-3 mr-1" /> Full Frame + BBox
               </Badge>
             )}
