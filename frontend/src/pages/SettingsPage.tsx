@@ -8,6 +8,7 @@ import {
   Loader2,
   CheckCircle2,
   MapPin,
+  RotateCcw,
 } from "lucide-react";
 import api from "@/api/client";
 
@@ -91,6 +92,31 @@ export default function SettingsPage() {
     }
   };
 
+  const resetAllAI = async () => {
+    if (!confirm(`Tắt AI trên tất cả ${aiActiveCount} camera? Sau đó bạn có thể bật lại cho ${maxAiCameras} camera mong muốn.`)) return;
+    setSaving("__reset__");
+    try {
+      await Promise.all(
+        cameras
+          .filter((c) => c.ai_detect_person || c.ai_detect_vehicle || c.ai_detect_fire)
+          .map((c) =>
+            api.patch(`/cameras/${c.camera_id}/ai-layers`, {
+              detect_person: false,
+              detect_vehicle: false,
+              detect_fire: false,
+            })
+          )
+      );
+      setCameras((prev) =>
+        prev.map((c) => ({ ...c, ai_detect_person: false, ai_detect_vehicle: false, ai_detect_fire: false }))
+      );
+    } catch (err) {
+      console.error("Reset failed:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const hasAnyAI = (c: CameraAI) => c.ai_detect_person || c.ai_detect_vehicle || c.ai_detect_fire;
 
   return (
@@ -145,9 +171,25 @@ export default function SettingsPage() {
             <Cpu className="h-4 w-4 text-zinc-400" />
             Cấu hình AI theo Camera
           </h3>
-          <span className="text-xs text-zinc-500">
-            {aiActiveCount >= maxAiCameras ? "⚠ Đã đạt giới hạn" : `Còn ${maxAiCameras - aiActiveCount} slot`}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-zinc-500">
+              {aiActiveCount >= maxAiCameras ? "⚠ Đã đạt giới hạn" : `Còn ${maxAiCameras - aiActiveCount} slot`}
+            </span>
+            {aiActiveCount > 0 && (
+              <button
+                onClick={resetAllAI}
+                disabled={saving === "__reset__"}
+                className="flex items-center gap-1 px-2.5 py-1 text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded-md hover:bg-red-500/20 transition-colors disabled:opacity-50"
+              >
+                {saving === "__reset__" ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+                Đặt lại tất cả
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
