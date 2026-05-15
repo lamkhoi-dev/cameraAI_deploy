@@ -63,7 +63,7 @@ USE_INT8 = False      # Use INT8 quantization (fastest but least accurate)
 
 # ============= FRAME PROCESSING =============
 SKIP_FRAMES = 3                         # Process every Nth frame (2-3fps at 30fps input)
-FRAME_RESIZE_SCALE = 0.5               # Resize frame for processing (0.5 = 50%)
+FRAME_RESIZE_SCALE = 1.0               # Full resolution (1.0 = 100%)
 FRAME_BUFFER_SIZE = 10                 # Maximum frames to buffer
 
 # ============= TRACKING CONFIGURATION =============

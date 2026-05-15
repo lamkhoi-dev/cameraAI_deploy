@@ -24,14 +24,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libtbb2 \
     libtbb-dev \
-    libjasper-dev \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
     libdc1394-dev \
     libharfbuzz0b \
     libwebp7 \
-    libtesseract5 \
+    tesseract-ocr \
+    libtesseract-dev \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -46,10 +47,11 @@ COPY requirements.txt .
 # CUDA 12.4 is the last version supporting Pascal GPUs
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install PyTorch 2.7 for CUDA 12.4 (last version supporting Tesla P4/Pascal)
-RUN pip install --no-cache-dir torch==2.7.0 torchvision==0.22.0 \
+# Install PyTorch for CUDA 12.4 (last version supporting Tesla P4/Pascal)
+RUN pip install --no-cache-dir --timeout=300 --retries=5 \
+    torch==2.6.0 torchvision==0.21.0 \
     --index-url https://download.pytorch.org/whl/cu124 \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --timeout=300 --retries=5 -r requirements.txt
 
 # Copy application code
 COPY . .
@@ -58,7 +60,7 @@ COPY . .
 RUN mkdir -p ai_engine/models cropped_data/persons cropped_data/vehicles cropped_data/fire_alerts
 
 # Verify installation
-RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
+RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
 
 # Health check script
 RUN echo '#!/bin/bash\n\
@@ -74,8 +76,8 @@ except Exception as e:\n\
     sys.exit(1)\n\
 ' > /app/healthcheck.py
 
-# Set default command
-CMD ["python3", "main.py"]
+# Set default command — production multi-camera entry point
+CMD ["python3", "run_engine.py"]
 
 # Build instructions:
 # docker build -t camera-ai:latest .
