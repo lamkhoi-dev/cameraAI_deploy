@@ -49,7 +49,10 @@ function ColorDots({ label, colors }: { label: string; colors?: ColorInfo[] }) {
   );
 }
 
-/** Annotation viewer: full-frame with bbox overlay + hover magnifier */
+/**
+ * Annotation viewer: full-frame with bbox overlay.
+ * Hover bbox → shows enlarged crop of that region below the image.
+ */
 function AnnotationViewer({
   fullSrc,
   cropSrc,
@@ -64,20 +67,35 @@ function AnnotationViewer({
   confidence: number;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imgNat, setImgNat] = useState({ w: 0, h: 0 });
   const [isHovering, setIsHovering] = useState(false);
-  const [magnifier, setMagnifier] = useState<{ x: number; y: number } | null>(null);
+  const [zoomDataUrl, setZoomDataUrl] = useState<string | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const MAGNIFIER_SIZE = 220;
-  const MAGNIFIER_ZOOM = 3.5;
 
   const onImgLoad = useCallback(() => {
     if (!imgRef.current) return;
-    setImgNat({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight });
-  }, []);
+    const nat = { w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight };
+    setImgNat(nat);
 
-  // Compute bbox position as CSS % relative to image natural size
+    // Pre-render the bbox crop at high resolution
+    if (bbox && bbox.length >= 4 && canvasRef.current) {
+      const [x1, y1, x2, y2] = bbox;
+      const cw = x2 - x1;
+      const ch = y2 - y1;
+      if (cw > 0 && ch > 0) {
+        const canvas = canvasRef.current;
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(imgRef.current, x1, y1, cw, ch, 0, 0, cw, ch);
+          setZoomDataUrl(canvas.toDataURL("image/jpeg", 0.92));
+        }
+      }
+    }
+  }, [bbox]);
+
   const getBboxStyle = (): React.CSSProperties | null => {
     if (!bbox || bbox.length < 4 || !imgNat.w || !imgNat.h) return null;
     const [x1, y1, x2, y2] = bbox;
@@ -94,115 +112,109 @@ function AnnotationViewer({
   const bboxGlow = isPerson ? "rgba(59,130,246,0.15)" : "rgba(16,185,129,0.15)";
   const conf = Math.round(confidence * 100);
 
-  // Delayed hover to prevent accidental trigger
   const onBboxEnter = useCallback(() => {
-    hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
+    hoverTimerRef.current = setTimeout(() => setIsHovering(true), 120);
   }, []);
 
   const onBboxLeave = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     setIsHovering(false);
-    setMagnifier(null);
   }, []);
 
-  const onBboxMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = imgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setMagnifier({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  }, []);
-
-  const getMagnifierStyle = (): React.CSSProperties => {
-    if (!magnifier || !imgRef.current) return {};
-    const el = imgRef.current;
-    const bgW = el.offsetWidth * MAGNIFIER_ZOOM;
-    const bgH = el.offsetHeight * MAGNIFIER_ZOOM;
-    const bx = magnifier.x * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2;
-    const by = magnifier.y * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2;
-    return {
-      backgroundImage: `url(${fullSrc})`,
-      backgroundSize: `${bgW}px ${bgH}px`,
-      backgroundPosition: `-${bx}px -${by}px`,
-      left: magnifier.x - MAGNIFIER_SIZE / 2,
-      top: magnifier.y - MAGNIFIER_SIZE / 2,
-      width: MAGNIFIER_SIZE,
-      height: MAGNIFIER_SIZE,
-    };
-  };
-
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); };
   }, []);
 
   return (
-    <div className="relative bg-zinc-950 flex items-center justify-center select-none overflow-hidden">
-      <div className="relative inline-block w-full">
-        <img
-          ref={imgRef}
-          src={fullSrc}
-          alt="Full frame"
-          className="w-full max-h-[70vh] object-contain"
-          onLoad={onImgLoad}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          draggable={false}
-        />
-
-        {/* Bbox overlay */}
-        {bboxStyle && (
-          <div
-            className="absolute transition-all duration-200 ease-out"
-            style={{
-              ...bboxStyle,
-              border: `2.5px solid ${bboxColor}`,
-              backgroundColor: isHovering ? bboxGlow : "transparent",
-              boxShadow: isHovering
-                ? `0 0 24px ${bboxColor}, inset 0 0 30px ${bboxGlow}`
-                : `0 0 0 1px ${bboxColor}`,
-              cursor: "crosshair",
-              zIndex: 10,
-            }}
-            onMouseEnter={onBboxEnter}
-            onMouseLeave={onBboxLeave}
-            onMouseMove={onBboxMouseMove}
-          >
-            {/* Label */}
-            <div
-              className="absolute -top-6 left-0 px-2 py-0.5 text-[11px] font-bold text-white whitespace-nowrap rounded-t-sm"
-              style={{ backgroundColor: bboxColor }}
-            >
-              {isPerson ? "👤 PERSON" : "🚗 VEHICLE"} · {conf}%
-            </div>
-
-            {/* Corner markers */}
-            {[
-              "-top-[2px] -left-[2px] border-t-[3px] border-l-[3px]",
-              "-top-[2px] -right-[2px] border-t-[3px] border-r-[3px]",
-              "-bottom-[2px] -left-[2px] border-b-[3px] border-l-[3px]",
-              "-bottom-[2px] -right-[2px] border-b-[3px] border-r-[3px]",
-            ].map((pos, i) => (
-              <div key={i} className={`absolute w-4 h-4 ${pos}`} style={{ borderColor: bboxColor }} />
-            ))}
-          </div>
-        )}
-
-        {/* Magnifier lens — only appears after hover delay */}
-        {isHovering && magnifier && (
-          <div
-            className="absolute rounded-full border-[3px] border-white/80 shadow-2xl pointer-events-none z-50 overflow-hidden"
-            style={{
-              ...getMagnifierStyle(),
-              boxShadow: "0 0 0 2px rgba(0,0,0,0.3), 0 8px 32px rgba(0,0,0,0.5)",
-            }}
+    <div className="relative bg-zinc-950 select-none overflow-hidden">
+      {/* Full-frame image with bbox overlay */}
+      <div className="relative w-full flex items-center justify-center">
+        <div className="relative inline-block w-full">
+          <img
+            ref={imgRef}
+            src={fullSrc}
+            alt="Full frame"
+            className="w-full max-h-[55vh] object-contain"
+            crossOrigin="anonymous"
+            onLoad={onImgLoad}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            draggable={false}
           />
-        )}
+          <canvas ref={canvasRef} className="hidden" />
 
-        {/* Hint */}
-        {bboxStyle && !isHovering && (
-          <div className="absolute bottom-3 right-3 opacity-80 bg-black/80 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1.5 pointer-events-none text-[11px] text-zinc-200 z-20">
-            <ZoomIn className="h-3.5 w-3.5" /> Rê chuột vào khung để phóng to
-          </div>
-        )}
+          {/* Bbox overlay */}
+          {bboxStyle && (
+            <div
+              className="absolute transition-all duration-200 ease-out"
+              style={{
+                ...bboxStyle,
+                border: `2.5px solid ${bboxColor}`,
+                backgroundColor: isHovering ? bboxGlow : "transparent",
+                boxShadow: isHovering
+                  ? `0 0 24px ${bboxColor}, inset 0 0 30px ${bboxGlow}`
+                  : `0 0 0 1px ${bboxColor}`,
+                cursor: "pointer",
+                zIndex: 10,
+              }}
+              onMouseEnter={onBboxEnter}
+              onMouseLeave={onBboxLeave}
+            >
+              {/* Label */}
+              <div
+                className="absolute -top-6 left-0 px-2 py-0.5 text-[11px] font-bold text-white whitespace-nowrap rounded-t-sm"
+                style={{ backgroundColor: bboxColor }}
+              >
+                {isPerson ? "👤 PERSON" : "🚗 VEHICLE"} · {conf}%
+              </div>
+
+              {/* Corner markers */}
+              {[
+                "-top-[2px] -left-[2px] border-t-[3px] border-l-[3px]",
+                "-top-[2px] -right-[2px] border-t-[3px] border-r-[3px]",
+                "-bottom-[2px] -left-[2px] border-b-[3px] border-l-[3px]",
+                "-bottom-[2px] -right-[2px] border-b-[3px] border-r-[3px]",
+              ].map((pos, i) => (
+                <div key={i} className={`absolute w-4 h-4 ${pos}`} style={{ borderColor: bboxColor }} />
+              ))}
+            </div>
+          )}
+
+          {/* Hint */}
+          {bboxStyle && !isHovering && (
+            <div className="absolute bottom-3 right-3 opacity-80 bg-black/80 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1.5 pointer-events-none text-[11px] text-zinc-200 z-20">
+              <ZoomIn className="h-3.5 w-3.5" /> Rê chuột vào khung để xem chi tiết
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Zoomed bbox region — appears below the full frame on hover */}
+      {isHovering && zoomDataUrl && (
+        <div className="border-t border-zinc-800 bg-zinc-900/80 p-3 flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div
+            className="rounded-lg overflow-hidden border-2 flex-shrink-0"
+            style={{ borderColor: bboxColor }}
+          >
+            <img
+              src={zoomDataUrl}
+              alt="Bbox zoom"
+              className="h-[160px] w-auto object-contain"
+              style={{ imageRendering: "auto" }}
+            />
+          </div>
+          <div className="text-xs text-zinc-400 space-y-1">
+            <p className="text-zinc-200 font-medium text-sm">
+              {isPerson ? "👤 Đối tượng người" : "🚗 Phương tiện"} — {conf}%
+            </p>
+            {bbox && (
+              <p className="font-mono text-[10px] text-zinc-500">
+                BBox: [{bbox.join(", ")}] &nbsp;·&nbsp; {bbox[2]! - bbox[0]!}×{bbox[3]! - bbox[1]!}px
+              </p>
+            )}
+            <p className="text-zinc-500">Ảnh phóng to từ vùng phát hiện trong full frame</p>
+          </div>
+        </div>
+      )}
 
       {/* Crop mini-thumbnail */}
       {cropSrc && (
