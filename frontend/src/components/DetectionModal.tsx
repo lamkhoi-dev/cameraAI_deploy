@@ -78,8 +78,6 @@ function MagnifierImage({ src, alt }: { src: string; alt: string }) {
   const getMagnifierStyle = (): React.CSSProperties => {
     if (!lens || !imgRef.current) return {};
     const el = imgRef.current;
-    const rx = el.offsetWidth / naturalSize.w;
-    const ry = el.offsetHeight / naturalSize.h;
     const bx = lens.x * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2;
     const by = lens.y * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2;
     return {
