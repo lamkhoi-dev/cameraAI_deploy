@@ -78,6 +78,8 @@ services:
       BACKEND_API_URL: "http://cam-backend:8001"
       API_KEY: "${API_KEY:-}"
       LOG_LEVEL: "INFO"
+      TZ: "Asia/Ho_Chi_Minh"
+      FULL_FRAME_MODE: "true"     # set false to revert to crop-only view
 
     volumes:
       - ./ai_engine/models:/app/ai_engine/models
@@ -199,6 +201,7 @@ services:
       args:
         VITE_API_BASE: "/api"
         VITE_GO2RTC_BASE: "/go2rtc"
+        VITE_FULL_FRAME_MODE: "true"   # set false to revert to crop-only view
     image: camcore-frontend:v1.0
     container_name: cam-frontend
 

@@ -41,6 +41,11 @@ ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin123")
 # OCR toggle (disable if PaddleOCR not available)
 USE_OCR = os.getenv("USE_OCR", "true").lower() == "true"
 
+# Full frame mode — save original frame alongside crop
+FULL_FRAME_MODE = os.getenv("FULL_FRAME_MODE", "false").lower() == "true"
+FULL_FRAME_INTERVAL = 5.0  # min seconds between full frame saves per camera
+_last_full_frame: dict = {}  # cam_id -> {"ts": float, "path": str}
+
 # Global JWT token
 _jwt_token = ""
 
@@ -272,6 +277,26 @@ def _save_crop(crop_img: np.ndarray, category: str, identifier: str) -> str:
         return ""
 
 
+def _save_full_frame(frame: np.ndarray, cam_id: str, frame_count: int) -> str:
+    """Save full camera frame (rate-limited). Returns relative path for URL serving."""
+    if not FULL_FRAME_MODE:
+        return ""
+    now = time.time()
+    last = _last_full_frame.get(cam_id, {"ts": 0})
+    if now - last["ts"] < FULL_FRAME_INTERVAL:
+        return last.get("path", "")
+    try:
+        save_dir = CROPPED_DATA_DIR / "full_frames"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{cam_id}_{frame_count}.jpg"
+        cv2.imwrite(str(save_dir / filename), frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        rel_path = str(CROPPED_DATA_DIR / "full_frames" / filename)
+        _last_full_frame[cam_id] = {"ts": now, "path": rel_path}
+        return rel_path
+    except Exception:
+        return ""
+
+
 def process_camera(camera: dict, models: dict):
     """Process a single camera stream in its own thread."""
     cam_id = camera.get("camera_id", "unknown")
@@ -305,12 +330,20 @@ def process_camera(camera: dict, models: dict):
 
             frame_count += 1
 
+            # Log frame resolution once on first processed frame
+            if frame_count == 1:
+                h0, w0 = frame.shape[:2]
+                log.info(f"[{cam_id}] 📐 Stream resolution: {w0}x{h0}")
+
             # Skip frames for performance
             if frame_count % SKIP_FRAMES != 0:
                 continue
 
             # Use full resolution frame (no resize)
             proc_frame = frame
+
+            # Save full frame (rate-limited, only when FULL_FRAME_MODE=true)
+            full_frame_path = _save_full_frame(frame, cam_id, frame_count)
 
             persons = []
             vehicles = []
@@ -345,7 +378,10 @@ def process_camera(camera: dict, models: dict):
                                 "track_id": track_id,
                                 "confidence": round(conf, 3),
                                 "bbox": bbox,
-                                "attributes": attributes if attributes else None,
+                                "attributes": {
+                                    **(attributes or {}),
+                                    **(({"full_frame_path": full_frame_path} if full_frame_path else {})),
+                                } or None,
                                 "image_path": crop_path,
                             })
             except Exception as e:
@@ -383,6 +419,7 @@ def process_camera(camera: dict, models: dict):
                                 "license_plate": plate_info.get("text") if plate_info else None,
                                 "colors": colors,
                                 "image_path": crop_path,
+                                "full_frame_path": full_frame_path or None,
                             })
             except Exception as e:
                 log.debug(f"[{cam_id}] Object error: {e}")

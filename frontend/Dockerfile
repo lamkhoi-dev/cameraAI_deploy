@@ -3,10 +3,12 @@ FROM node:20-alpine AS build
 # Build arguments for environment variables
 ARG VITE_API_BASE
 ARG VITE_GO2RTC_BASE
+ARG VITE_FULL_FRAME_MODE
 
 # Set environment variables during build
 ENV VITE_API_BASE=$VITE_API_BASE
 ENV VITE_GO2RTC_BASE=$VITE_GO2RTC_BASE
+ENV VITE_FULL_FRAME_MODE=$VITE_FULL_FRAME_MODE
 
 WORKDIR /app
 

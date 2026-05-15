@@ -20,6 +20,7 @@ import {
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import { COLOR_MAP, ALL_COLORS, cropUrl } from "@/lib/colors";
+import { formatVN } from "@/lib/date";
 import DetectionModal from "@/components/DetectionModal";
 import type { DetectionDetail, ColorInfo } from "@/components/DetectionModal";
 
@@ -82,7 +83,7 @@ function DetectionCard({ det, onClick }: { det: DetectionDetail; onClick: () => 
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
             <Camera className="h-3 w-3" /> {det.camera}
           </div>
-          <span className="text-[10px] text-zinc-500 font-mono">{det.timestamp}</span>
+          <span className="text-[10px] text-zinc-500 font-mono">{formatVN(det.timestamp)}</span>
         </div>
         {/* Color dots */}
         <div className="flex gap-1 flex-wrap">
@@ -160,10 +161,12 @@ export default function HistoryPage() {
           id: `p_${p.id}`,
           type: "person" as const,
           camera: String(p.camera_id || ""),
-          timestamp: p.timestamp ? new Date(String(p.timestamp)).toLocaleString("vi-VN") : "",
+          timestamp: String(p.timestamp || ""),
           confidence: Number(p.confidence) || 0,
           track_id: p.track_id as number | undefined,
           image_path: p.image_path as string | undefined,
+          full_frame_path: (p.attributes as Record<string, unknown>)?.full_frame_path as string | undefined,
+          bbox: p.bbox as number[] | undefined,
           shirt_colors: p.shirt_colors as ColorInfo[] | undefined,
           pants_colors: p.pants_colors as ColorInfo[] | undefined,
           hair_colors: p.hair_colors as ColorInfo[] | undefined,
@@ -185,10 +188,12 @@ export default function HistoryPage() {
           id: `v_${v.id}`,
           type: "vehicle" as const,
           camera: String(v.camera_id || ""),
-          timestamp: v.timestamp ? new Date(String(v.timestamp)).toLocaleString("vi-VN") : "",
+          timestamp: String(v.timestamp || ""),
           confidence: Number(v.confidence) || 0,
           track_id: v.track_id as number | undefined,
           image_path: v.image_path as string | undefined,
+          full_frame_path: v.full_frame_path as string | undefined,
+          bbox: v.bbox as number[] | undefined,
           vehicle_type: String(v.vehicle_type || ""),
           vehicle_colors: v.vehicle_colors as ColorInfo[] | undefined,
           license_plate: v.license_plate as string | undefined,
