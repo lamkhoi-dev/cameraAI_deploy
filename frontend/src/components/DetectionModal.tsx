@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { cropUrl } from "@/lib/colors";
 import { formatVN } from "@/lib/date";
-import { Camera, Clock, Target, User, Car, ZoomIn, Maximize2 } from "lucide-react";
+import { Camera, Clock, Target, User, Car, ZoomIn } from "lucide-react";
 
 interface ColorInfo {
   rank: number;
@@ -55,13 +55,11 @@ function ColorDots({ label, colors }: { label: string; colors?: ColorInfo[] }) {
  */
 function AnnotationViewer({
   fullSrc,
-  cropSrc,
   bbox,
   isPerson,
   confidence,
 }: {
   fullSrc: string;
-  cropSrc: string | null;
   bbox?: number[];
   isPerson: boolean;
   confidence: number;
@@ -127,14 +125,13 @@ function AnnotationViewer({
 
   return (
     <div className="relative bg-zinc-950 select-none overflow-hidden">
-      {/* Full-frame image with bbox overlay */}
       <div className="relative w-full flex items-center justify-center">
         <div className="relative inline-block w-full">
           <img
             ref={imgRef}
             src={fullSrc}
             alt="Full frame"
-            className="w-full max-h-[55vh] object-contain"
+            className="w-full max-h-[65vh] object-contain"
             crossOrigin="anonymous"
             onLoad={onImgLoad}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -185,46 +182,21 @@ function AnnotationViewer({
               <ZoomIn className="h-3.5 w-3.5" /> Rê chuột vào khung để xem chi tiết
             </div>
           )}
+
+          {/* Zoomed crop — fixed position overlay, no layout shift */}
+          {isHovering && zoomDataUrl && (
+            <div className="absolute bottom-3 left-3 z-30 rounded-lg overflow-hidden border-2 shadow-2xl bg-black/90"
+              style={{ borderColor: bboxColor }}
+            >
+              <img
+                src={zoomDataUrl}
+                alt="Bbox zoom"
+                className="h-[180px] w-auto object-contain"
+              />
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Zoomed bbox region — appears below the full frame on hover */}
-      {isHovering && zoomDataUrl && (
-        <div className="border-t border-zinc-800 bg-zinc-900/80 p-3 flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div
-            className="rounded-lg overflow-hidden border-2 flex-shrink-0"
-            style={{ borderColor: bboxColor }}
-          >
-            <img
-              src={zoomDataUrl}
-              alt="Bbox zoom"
-              className="h-[160px] w-auto object-contain"
-              style={{ imageRendering: "auto" }}
-            />
-          </div>
-          <div className="text-xs text-zinc-400 space-y-1">
-            <p className="text-zinc-200 font-medium text-sm">
-              {isPerson ? "👤 Đối tượng người" : "🚗 Phương tiện"} — {conf}%
-            </p>
-            {bbox && (
-              <p className="font-mono text-[10px] text-zinc-500">
-                BBox: [{bbox.join(", ")}] &nbsp;·&nbsp; {bbox[2]! - bbox[0]!}×{bbox[3]! - bbox[1]!}px
-              </p>
-            )}
-            <p className="text-zinc-500">Ảnh phóng to từ vùng phát hiện trong full frame</p>
-          </div>
-        </div>
-      )}
-
-      {/* Crop mini-thumbnail */}
-      {cropSrc && (
-        <div className="absolute top-3 left-3 z-20">
-          <div className="w-14 h-18 rounded-lg border border-zinc-600/40 overflow-hidden bg-zinc-900/90 shadow-xl backdrop-blur-sm">
-            <img src={cropSrc} alt="Crop" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </div>
-          <div className="text-[8px] text-zinc-500 mt-0.5 text-center">Crop</div>
-        </div>
-      )}
     </div>
   );
 }
@@ -290,11 +262,6 @@ export default function DetectionModal({
           <DialogTitle className="flex items-center gap-2">
             {isPerson ? <User className="h-5 w-5 text-blue-400" /> : <Car className="h-5 w-5 text-emerald-400" />}
             Chi tiết {isPerson ? "Người" : "Phương tiện"}
-            {hasFullFrame && (
-              <Badge className="ml-auto text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                <Maximize2 className="h-3 w-3 mr-1" /> Full Frame + BBox
-              </Badge>
-            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -303,7 +270,6 @@ export default function DetectionModal({
           {hasFullFrame ? (
             <AnnotationViewer
               fullSrc={fullSrc!}
-              cropSrc={cropSrc}
               bbox={detection.bbox}
               isPerson={isPerson}
               confidence={detection.confidence}
