@@ -4,7 +4,10 @@
 export function formatVN(iso: string | null | undefined, opts?: { dateOnly?: boolean }): string {
   if (!iso) return "—";
   try {
-    const d = new Date(iso);
+    // Backend stores UTC but returns without Z suffix — force UTC interpretation
+    const utcIso = iso.endsWith("Z") || iso.includes("+") || iso.includes("-", 10) ? iso : iso + "Z";
+    const d = new Date(utcIso);
+    if (isNaN(d.getTime())) return iso;
     if (opts?.dateOnly) {
       return d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
     }
@@ -28,7 +31,8 @@ export function formatVN(iso: string | null | undefined, opts?: { dateOnly?: boo
 export function formatVNTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleTimeString("vi-VN", {
+    const utcIso = iso.endsWith("Z") || iso.includes("+") || iso.includes("-", 10) ? iso : iso + "Z";
+    return new Date(utcIso).toLocaleTimeString("vi-VN", {
       timeZone: "Asia/Ho_Chi_Minh",
       hour: "2-digit",
       minute: "2-digit",
