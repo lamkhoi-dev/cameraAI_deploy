@@ -178,6 +178,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-password.sh:/docker-entrypoint-initdb.d/init-password.sh:ro
+      - ./docker/postgres/entrypoint-wrapper.sh:/entrypoint-wrapper.sh:ro
+
+    entrypoint: ["/bin/sh", "/entrypoint-wrapper.sh"]
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
