@@ -59,13 +59,8 @@ function ColorDots({ label, colors }: { label: string; colors?: ColorInfo[] }) {
 function MagnifierImage({ src, alt }: { src: string; alt: string }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [lens, setLens] = useState<{ x: number; y: number } | null>(null);
-  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
 
-  const onLoad = useCallback(() => {
-    if (imgRef.current) {
-      setNaturalSize({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight });
-    }
-  }, []);
+  const onLoad = useCallback(() => {}, []);
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
