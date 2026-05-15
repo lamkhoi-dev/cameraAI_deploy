@@ -31,7 +31,7 @@ BACKEND_URL = os.getenv("BACKEND_API_URL", "http://cam-backend:8001")
 GO2RTC_HOST = os.getenv("GO2RTC_URL", "go2rtc-server")
 GO2RTC_RTSP_PORT = int(os.getenv("GO2RTC_RTSP_PORT", "8554"))
 API_KEY = os.getenv("API_KEY", "")
-MAX_CAMERAS = int(os.getenv("MAX_CAMERAS", "15"))
+MAX_CAMERAS = int(os.getenv("MAX_CAMERAS", "12"))
 SKIP_FRAMES = int(os.getenv("SKIP_FRAMES", "3"))
 CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.5"))
 HEARTBEAT_INTERVAL = 30
@@ -309,9 +309,8 @@ def process_camera(camera: dict, models: dict):
             if frame_count % SKIP_FRAMES != 0:
                 continue
 
-            # Resize for faster inference
-            h, w = frame.shape[:2]
-            small = cv2.resize(frame, (w // 2, h // 2))
+            # Use full resolution frame (no resize)
+            proc_frame = frame
 
             persons = []
             vehicles = []
@@ -319,7 +318,7 @@ def process_camera(camera: dict, models: dict):
             # Person detection + attribute analysis
             try:
                 pose_results = models["pose"].track(
-                    small, persist=True, conf=CONF_THRESHOLD, verbose=False
+                    proc_frame, persist=True, conf=CONF_THRESHOLD, verbose=False
                 )
                 if pose_results and pose_results[0].boxes:
                     for box in pose_results[0].boxes:
@@ -328,18 +327,16 @@ def process_camera(camera: dict, models: dict):
                         if conf >= CONF_THRESHOLD and track_id >= 0:
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
 
-                            # Analyze attributes (colors) on the ORIGINAL frame
-                            # Scale bbox back to original frame size
-                            orig_bbox = [b * 2 for b in bbox]
-                            attributes = _analyze_person_attributes(frame, orig_bbox)
+                            # Analyze attributes (colors) on the full-res frame
+                            attributes = _analyze_person_attributes(frame, bbox)
 
                             if attributes:
                                 log.info(f"[{cam_id}] 🎨 Person t{track_id} attrs: shirt={attributes.get('shirt_colors', [])[:1]}")
                             else:
-                                log.info(f"[{cam_id}] ⚠ Person t{track_id} bbox={orig_bbox} — attrs empty (too small?)")
+                                log.info(f"[{cam_id}] ⚠ Person t{track_id} bbox={bbox} — attrs empty (too small?)")
 
                             # Save crop
-                            crop = _crop_region(frame, orig_bbox)
+                            crop = _crop_region(frame, bbox)
                             crop_path = ""
                             if crop is not None:
                                 crop_path = _save_crop(crop, "persons", f"{cam_id}_p{track_id}_{frame_count}")
@@ -347,7 +344,7 @@ def process_camera(camera: dict, models: dict):
                             persons.append({
                                 "track_id": track_id,
                                 "confidence": round(conf, 3),
-                                "bbox": orig_bbox,
+                                "bbox": bbox,
                                 "attributes": attributes if attributes else None,
                                 "image_path": crop_path,
                             })
@@ -357,7 +354,7 @@ def process_camera(camera: dict, models: dict):
             # Vehicle detection + color + OCR
             try:
                 obj_results = models["object"].predict(
-                    small, conf=CONF_THRESHOLD, verbose=False
+                    proc_frame, conf=CONF_THRESHOLD, verbose=False
                 )
                 if obj_results and obj_results[0].boxes:
                     for box in obj_results[0].boxes:
@@ -367,14 +364,13 @@ def process_camera(camera: dict, models: dict):
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
                             vehicle_type = VEHICLE_CLASSES[cls_id]
 
-                            # Scale bbox back to original frame size
-                            orig_bbox = [b * 2 for b in bbox]
+                            # Use bbox directly (full-res, no scaling needed)
 
                             # Analyze color + OCR on original frame
-                            colors, plate_info = _analyze_vehicle(frame, orig_bbox, vehicle_type)
+                            colors, plate_info = _analyze_vehicle(frame, bbox, vehicle_type)
 
                             # Save crop
-                            crop = _crop_region(frame, orig_bbox)
+                            crop = _crop_region(frame, bbox)
                             crop_path = ""
                             if crop is not None:
                                 crop_path = _save_crop(crop, "vehicles", f"{cam_id}_v{cls_id}_{frame_count}")
@@ -383,7 +379,7 @@ def process_camera(camera: dict, models: dict):
                                 "track_id": -1,
                                 "vehicle_type": vehicle_type,
                                 "confidence": round(conf, 3),
-                                "bbox": orig_bbox,
+                                "bbox": bbox,
                                 "license_plate": plate_info.get("text") if plate_info else None,
                                 "colors": colors,
                                 "image_path": crop_path,
