@@ -44,7 +44,7 @@ USE_OCR = os.getenv("USE_OCR", "true").lower() == "true"
 
 # Full frame mode — save original frame alongside crop
 FULL_FRAME_MODE = os.getenv("FULL_FRAME_MODE", "false").lower() == "true"
-FULL_FRAME_INTERVAL = 5.0  # min seconds between full frame saves per camera
+FULL_FRAME_INTERVAL = 2.0  # min seconds between full frame saves per camera
 _last_full_frame: dict = {}  # cam_id -> {"ts": float, "path": str}
 
 # Global JWT token
@@ -355,10 +355,10 @@ def process_camera(camera: dict, models: dict):
                     proc_frame, persist=True, conf=PERSON_CONF_THRESHOLD, verbose=False
                 )
                 if pose_results and pose_results[0].boxes:
-                    for box in pose_results[0].boxes:
+                    for i, box in enumerate(pose_results[0].boxes):
                         conf = float(box.conf)
-                        track_id = int(box.id) if box.id is not None else -1
-                        if conf >= PERSON_CONF_THRESHOLD and track_id >= 0:
+                        track_id = int(box.id) if box.id is not None else -(i + 1)
+                        if conf >= PERSON_CONF_THRESHOLD:
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
 
                             # Analyze attributes (colors) on the full-res frame
