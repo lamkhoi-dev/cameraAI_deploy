@@ -82,22 +82,16 @@ export function CameraTile({
             <span className="text-[10px] font-medium text-zinc-400/80 drop-shadow-md">{protocol}</span>
           </div>
 
-          {/* AI Active badge */}
-          {aiTags.length > 0 && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30">
-              <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-sm">
-                AI
-              </span>
-            </div>
-          )}
-
-          {/* EVENT REALTIME — always visible on live cam */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1">
-            <span className="text-[9px] font-bold tracking-widest text-white/40 uppercase select-none">
-              Event Realtime
+          {/* Top-center: EVENT REALTIME — always on */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30">
+            <span className="text-[11px] font-extrabold tracking-widest text-red-400/80 uppercase drop-shadow-md select-none">
+              EVENT REALTIME
             </span>
-            {/* Event counts — only show when active */}
-            {showEvent && (eventData.persons > 0 || eventData.vehicles > 0) && (
+          </div>
+
+          {/* Event counts — bottom center, only when active */}
+          {showEvent && (eventData.persons > 0 || eventData.vehicles > 0) && (
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30">
               <div className="flex items-center gap-2 bg-black/70 backdrop-blur-sm border border-zinc-700/50 rounded-full px-3 py-1 animate-in fade-in duration-300">
                 {eventData.persons > 0 && (
                   <span className="flex items-center gap-1 text-[11px] text-blue-400 font-medium">
@@ -110,8 +104,8 @@ export function CameraTile({
                   </span>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </>
       ) : (
         /* Offline state */
