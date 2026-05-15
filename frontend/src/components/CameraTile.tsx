@@ -93,7 +93,8 @@ export function CameraTile({
 
           {/* Event Realtime — animated badge */}
           {showEvent && (eventData.persons > 0 || eventData.vehicles > 0) && (
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col items-center gap-1">
+              <span className="text-[9px] font-bold tracking-widest text-white/50 uppercase">Event Realtime</span>
               <div className="flex items-center gap-2 bg-black/70 backdrop-blur-sm border border-zinc-700/50 rounded-full px-3 py-1">
                 {eventData.persons > 0 && (
                   <span className="flex items-center gap-1 text-[11px] text-blue-400 font-medium">
