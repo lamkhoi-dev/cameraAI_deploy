@@ -15,8 +15,6 @@ import {
 import api from "@/api/client";
 import { useWebSocket } from "@/hooks/useWebSocket";
 
-const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
-
 interface BackendCamera {
   id: number;
   camera_id: string;
@@ -28,6 +26,7 @@ interface BackendCamera {
   ai_detect_person: boolean;
   ai_detect_vehicle: boolean;
   ai_detect_fire: boolean;
+  display_interval_seconds?: number;
   resolution: string | null;
   fps: number;
 }
@@ -50,6 +49,15 @@ export default function DashboardPage() {
   // Track event counts per camera
   const eventTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  const getEventWindowMs = useCallback(
+    (cameraId: string) => {
+      const camera = cameras.find((item) => item.camera_id === cameraId);
+      const seconds = camera?.display_interval_seconds ?? 5;
+      return Math.max(1000, seconds * 1000);
+    },
+    [cameras],
+  );
+
   useWebSocket({
     url: `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/ws`,
     onMessage: (data) => {
@@ -61,6 +69,7 @@ export default function DashboardPage() {
 
       if (msg.type === "new_person_detected" && msg.payload?.camera_id) {
         const camId = msg.payload.camera_id;
+        const windowMs = getEventWindowMs(camId);
         setCameraEvents((prev) => ({
           ...prev,
           [camId]: {
@@ -75,11 +84,12 @@ export default function DashboardPage() {
             delete next[camId];
             return next;
           });
-        }, 5000);
+        }, windowMs);
       }
 
       if (msg.type === "new_vehicle_detected" && msg.payload?.camera_id) {
         const camId = msg.payload.camera_id;
+        const windowMs = getEventWindowMs(camId);
         setCameraEvents((prev) => ({
           ...prev,
           [camId]: {
@@ -94,7 +104,7 @@ export default function DashboardPage() {
             delete next[camId];
             return next;
           });
-        }, 5000);
+        }, windowMs);
       }
     },
   });
@@ -221,11 +231,8 @@ export default function DashboardPage() {
               key={cam.camera_id}
               name={cam.name}
               status={getStatus(cam)}
-              streamUrl={
-                getStatus(cam) === "online"
-                  ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc,mse`
-                  : undefined
-              }
+              cameraId={cam.camera_id}
+              displayIntervalSeconds={cam.display_interval_seconds}
               resolution={cam.resolution || "1080P / 30FPS"}
               aiTags={getAiTags(cam)}
               events={cameraEvents[cam.camera_id]}

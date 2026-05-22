@@ -14,6 +14,7 @@ from ..config import (
     CONF_THRESHOLD, CROPPED_DATA_DIR, FIRE_TEMPORAL_THRESHOLD,
     FIRE_MINIMUM_AREA, USE_GPU, GPU_DEVICE
 )
+from ..utils.roi_utils import apply_roi_mask
 from .base_processor import BaseProcessor
 
 
@@ -42,7 +43,7 @@ class FireProcessor(BaseProcessor):
             logger.warning(f"⚠️  Fire model not loaded (optional): {e}")
             return False
     
-    def process(self, frame: np.ndarray, frame_idx: int) -> Dict:
+    def process(self, frame: np.ndarray, frame_idx: int, roi_polygon_points: Optional[List[List[float]]] = None) -> Dict:
         """
         Detect fire and smoke
         
@@ -70,9 +71,11 @@ class FireProcessor(BaseProcessor):
             return alerts
         
         try:
+            masked_frame = apply_roi_mask(frame, roi_polygon_points)
+
             # Run detection
             results = self.model.predict(
-                frame,
+                masked_frame,
                 conf=CONF_THRESHOLD,
                 verbose=False
             )
@@ -153,7 +156,7 @@ class FireProcessor(BaseProcessor):
             snapshot_path = alert_dir / f"frame_{frame_idx}_alert.jpg"
             cv2.imwrite(str(snapshot_path), alert_crop)
             
-            return str(snapshot_path)
+            return snapshot_path.relative_to(CROPPED_DATA_DIR).as_posix()
         except Exception as e:
             logger.warning(f"⚠️  Failed to save fire snapshot: {e}")
             return ""

@@ -10,6 +10,7 @@ import time
 import signal
 import logging
 import threading
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from ultralytics import YOLO
 from datetime import datetime, timezone
 
 from ai_engine.utils.color_analyzer import ColorAnalyzer
+from ai_engine.utils.roi_utils import apply_roi_mask
 from ai_engine.config import (
     NUM_COLORS_PERSON, NUM_COLORS_VEHICLE, VEHICLE_CLASSES as AI_VEHICLE_CLASSES,
     CROPPED_DATA_DIR,
@@ -72,6 +74,12 @@ signal.signal(signal.SIGINT, handle_signal)
 # Color analyzers (shared across threads, thread-safe since they create new arrays)
 person_color_analyzer = ColorAnalyzer(num_colors=NUM_COLORS_PERSON)
 vehicle_color_analyzer = ColorAnalyzer(num_colors=NUM_COLORS_VEHICLE)
+
+# Model locks prevent concurrent YOLO access across camera workers.
+MODEL_LOCKS = {
+    "pose": threading.Lock(),
+    "object": threading.Lock(),
+}
 
 # Plate reader (lazy init, optional)
 plate_reader = None
@@ -137,6 +145,151 @@ def _auth_headers():
     return {"Authorization": f"Bearer {_jwt_token}"} if _jwt_token else {}
 
 
+def _point_in_polygon(point: tuple[int, int], polygon: list[list[float]]) -> bool:
+    """Return True if a point is inside a polygon defined in normalized coordinates."""
+    if len(polygon) < 3:
+        return True
+
+    x, y = point
+    inside = False
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        intersects = ((yi > y) != (yj > y)) and (
+            x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi
+        )
+        if intersects:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _roi_points_to_pixels(frame: np.ndarray, roi_points: list[list[float]] | None) -> list[list[float]]:
+    """Convert normalized ROI points [0..1] to pixel coordinates for current frame."""
+    if not roi_points:
+        return []
+
+    h, w = frame.shape[:2]
+    polygon: list[list[float]] = []
+    for p in roi_points:
+        if not isinstance(p, (list, tuple)) or len(p) < 2:
+            continue
+        px, py = p[0], p[1]
+        try:
+            polygon.append([float(px) * w, float(py) * h])
+        except Exception:
+            continue
+    return polygon
+
+
+def _fetch_camera_config(camera_id: str) -> dict:
+    """Fetch per-camera AI settings from backend."""
+    try:
+        r = httpx.get(f"{BACKEND_URL}/api/ai/config/{camera_id}", timeout=10)
+        r.raise_for_status()
+        return r.json() or {}
+    except Exception as e:
+        log.debug(f"[{camera_id}] Config fetch failed: {e}")
+        return {}
+
+def _encode_frame_base64(frame: np.ndarray) -> str | None:
+    """Encode a frame as base64 JPEG for alert snapshots."""
+    try:
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if not ok:
+            return None
+        return base64.b64encode(buf).decode("utf-8")
+    except Exception:
+        return None
+
+def _capture_single_frame(rtsp_url: str) -> np.ndarray | None:
+    """Grab a single frame from an RTSP stream."""
+    cap = cv2.VideoCapture(rtsp_url)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    try:
+        if not cap.isOpened():
+            return None
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            return None
+        return frame
+    finally:
+        cap.release()
+
+
+def _pose_track(models: dict, frame: np.ndarray):
+    with MODEL_LOCKS["pose"]:
+        with torch.inference_mode():
+            return models["pose"].track(frame, persist=True, conf=PERSON_CONF_THRESHOLD, verbose=False)
+
+
+def _object_predict(models: dict, frame: np.ndarray):
+    with MODEL_LOCKS["object"]:
+        with torch.inference_mode():
+            return models["object"].predict(frame, conf=CONF_THRESHOLD, verbose=False)
+
+def _detect_patrol_violations(frame: np.ndarray, cam_id: str, frame_index: int, models: dict, roi_points: list[list[float]]) -> list[dict]:
+    """Detect people/vehicles inside the patrol ROI."""
+    violations: list[dict] = []
+    polygon = _roi_points_to_pixels(frame, roi_points)
+    proc_frame = apply_roi_mask(frame, polygon) if polygon else frame
+
+    try:
+        pose_results = _pose_track(models, proc_frame)
+        if pose_results and pose_results[0].boxes:
+            for i, box in enumerate(pose_results[0].boxes):
+                conf = float(box.conf)
+                if conf < PERSON_CONF_THRESHOLD:
+                    continue
+                bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
+                x1, y1, x2, y2 = bbox
+                center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                if polygon and not _point_in_polygon(center, polygon):
+                    continue
+                violations.append({"kind": "person", "confidence": round(conf, 3), "bbox": bbox, "track_id": int(box.id) if box.id is not None else -(i + 1)})
+    except Exception as e:
+        log.debug(f"[{cam_id}] Patrol person error: {e}")
+
+    try:
+        obj_results = _object_predict(models, proc_frame)
+        if obj_results and obj_results[0].boxes:
+            for box in obj_results[0].boxes:
+                cls_id = int(box.cls)
+                if cls_id not in AI_VEHICLE_CLASSES:
+                    continue
+                conf = float(box.conf)
+                bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
+                x1, y1, x2, y2 = bbox
+                center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                if polygon and not _point_in_polygon(center, polygon):
+                    continue
+                violations.append({"kind": "vehicle", "confidence": round(conf, 3), "bbox": bbox, "track_id": -1, "vehicle_type": AI_VEHICLE_CLASSES[cls_id]})
+    except Exception as e:
+        log.debug(f"[{cam_id}] Patrol vehicle error: {e}")
+
+    return violations
+
+
+def push_alert(camera_id: str, frame_index: int, alert_type: str, severity: str, confidence: float, bbox: list[int] | None, snapshot_base64: str | None, description: str | None = None):
+    """Push a single alert to the backend."""
+    ts = datetime.now(timezone.utc).isoformat()
+    try:
+        with httpx.Client(timeout=10, headers=_auth_headers()) as client:
+            client.post(f"{BACKEND_URL}/api/ai/alerts", json={
+                "camera_id": camera_id,
+                "alert_type": alert_type,
+                "severity": severity,
+                "description": description,
+                "confidence": confidence,
+                "frame_index": frame_index,
+                "bbox": bbox,
+                "snapshot_base64": snapshot_base64,
+                "timestamp": ts,
+            })
+    except Exception as e:
+        log.debug(f"Alert push error ({camera_id}): {e}")
+
 def fetch_cameras():
     """Fetch active cameras from backend API."""
     try:
@@ -190,6 +343,42 @@ def push_heartbeat(camera_ids: list):
     except Exception:
         pass
 
+def patrol_camera(camera: dict, models: dict):
+    """Run periodic patrol monitoring for a camera."""
+    cam_id = camera.get("camera_id", "unknown")
+    rtsp_url = f"rtsp://{GO2RTC_HOST}:{GO2RTC_RTSP_PORT}/{cam_id}"
+    patrol_frame_index = 0
+
+    log.info(f"🛰️ [{cam_id}] Patrol worker started: {rtsp_url}")
+
+    while not shutdown_event.is_set():
+        camera_config = _fetch_camera_config(cam_id)
+        interval_minutes = int(camera_config.get("monitoring_interval_minutes") or camera.get("monitoring_interval_minutes") or 5)
+        roi_points = camera_config.get("patrol_region_points") or camera_config.get("ai_region_points") or []
+
+        frame = _capture_single_frame(rtsp_url)
+        if frame is not None:
+            violations = _detect_patrol_violations(frame, cam_id, patrol_frame_index, models, roi_points)
+            if violations:
+                best = max(violations, key=lambda item: item.get("confidence", 0.0))
+                description = f"{len(violations)} vi pham trong vung tuan tra"
+                snapshot = _encode_frame_base64(frame)
+                push_alert(
+                    cam_id,
+                    patrol_frame_index,
+                    "suspicious",
+                    "high",
+                    float(best.get("confidence", 0.0)),
+                    best.get("bbox"),
+                    snapshot,
+                    description,
+                )
+                log.info(f"[{cam_id}] Patrol violation: {description} (conf={best.get('confidence', 0.0):.3f})")
+        else:
+            log.debug(f"[{cam_id}] Patrol capture failed")
+
+        patrol_frame_index += 1
+        shutdown_event.wait(max(5, interval_minutes * 60))
 
 # COCO vehicle class IDs
 VEHICLE_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -273,7 +462,7 @@ def _save_crop(crop_img: np.ndarray, category: str, identifier: str) -> str:
         save_dir.mkdir(parents=True, exist_ok=True)
         path = save_dir / f"{identifier}.jpg"
         cv2.imwrite(str(path), crop_img)
-        return str(path)
+        return path.relative_to(CROPPED_DATA_DIR).as_posix()
     except Exception:
         return ""
 
@@ -292,7 +481,7 @@ def _save_full_frame(frame: np.ndarray, cam_id: str, frame_count: int) -> str:
         save_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{cam_id}_{frame_count}.jpg"
         cv2.imwrite(str(save_dir / filename), frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        rel_path = str(CROPPED_DATA_DIR / "full_frames" / filename)
+        rel_path = (CROPPED_DATA_DIR / "full_frames" / filename).relative_to(CROPPED_DATA_DIR).as_posix()
         _last_full_frame[cam_id] = {"ts": now, "path": rel_path}
         return rel_path
     except Exception:
@@ -303,8 +492,14 @@ def process_camera(camera: dict, models: dict):
     """Process a single camera stream in its own thread."""
     cam_id = camera.get("camera_id", "unknown")
     rtsp_url = f"rtsp://{GO2RTC_HOST}:{GO2RTC_RTSP_PORT}/{cam_id}"
+    camera_config = _fetch_camera_config(cam_id)
+    camera_fps = int(camera.get("fps") or 30)
+    ai_processing_fps = int(camera_config.get("ai_processing_fps") or camera_config.get("fps_target") or 3)
+    skip_frames = max(1, round(camera_fps / max(1, ai_processing_fps)))
+    ai_region_points = camera_config.get("ai_region_points") or []
 
     log.info(f"📷 [{cam_id}] Connecting: {rtsp_url}")
+    log.info(f"[{cam_id}] AI config: fps={ai_processing_fps}, skip={skip_frames}, roi_points={len(ai_region_points)}")
 
     cap = cv2.VideoCapture(rtsp_url)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -338,20 +533,19 @@ def process_camera(camera: dict, models: dict):
                 log.info(f"[{cam_id}] 📐 Stream resolution: {w0}x{h0}")
 
             # Skip frames for performance
-            if frame_count % SKIP_FRAMES != 0:
+            if frame_count % skip_frames != 0:
                 continue
 
             # Use full resolution frame (no resize)
-            proc_frame = frame
+            polygon = _roi_points_to_pixels(frame, ai_region_points)
+            proc_frame = apply_roi_mask(frame, polygon) if polygon else frame
 
             persons = []
             vehicles = []
 
             # Person detection + attribute analysis
             try:
-                pose_results = models["pose"].track(
-                    proc_frame, persist=True, conf=PERSON_CONF_THRESHOLD, verbose=False
-                )
+                pose_results = _pose_track(models, proc_frame)
                 if pose_results and pose_results[0].boxes:
                     for i, box in enumerate(pose_results[0].boxes):
                         conf = float(box.conf)
@@ -360,7 +554,13 @@ def process_camera(camera: dict, models: dict):
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
 
                             # Analyze attributes (colors) on the full-res frame
-                            attributes = _analyze_person_attributes(frame, bbox)
+                            attributes = _analyze_person_attributes(proc_frame, bbox)
+
+                            if polygon:
+                                x1, y1, x2, y2 = bbox
+                                center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                                if not _point_in_polygon(center, polygon):
+                                    continue
 
                             if attributes:
                                 log.info(f"[{cam_id}] 🎨 Person t{track_id} attrs: shirt={attributes.get('shirt_colors', [])[:1]}")
@@ -385,9 +585,7 @@ def process_camera(camera: dict, models: dict):
 
             # Vehicle detection + color + OCR
             try:
-                obj_results = models["object"].predict(
-                    proc_frame, conf=CONF_THRESHOLD, verbose=False
-                )
+                obj_results = _object_predict(models, proc_frame)
                 if obj_results and obj_results[0].boxes:
                     for box in obj_results[0].boxes:
                         cls_id = int(box.cls)
@@ -396,8 +594,14 @@ def process_camera(camera: dict, models: dict):
                             bbox = box.xyxy[0].cpu().numpy().astype(int).tolist()
                             vehicle_type = VEHICLE_CLASSES[cls_id]
 
+                            if polygon:
+                                x1, y1, x2, y2 = bbox
+                                center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                                if not _point_in_polygon(center, polygon):
+                                    continue
+
                             # Analyze color + OCR on original frame
-                            colors, plate_info = _analyze_vehicle(frame, bbox, vehicle_type)
+                            colors, plate_info = _analyze_vehicle(proc_frame, bbox, vehicle_type)
 
                             # Save crop
                             crop = _crop_region(frame, bbox)
@@ -498,11 +702,14 @@ def main():
     hb_thread.start()
 
     # Process cameras concurrently (one thread per camera)
-    with ThreadPoolExecutor(max_workers=MAX_CAMERAS, thread_name_prefix="cam") as pool:
+    # Process cameras concurrently (continuous stream + periodic patrol worker per camera)
+    with ThreadPoolExecutor(max_workers=max(2, MAX_CAMERAS * 2), thread_name_prefix="cam") as pool:
         futures = []
         for cam in cameras:
             f = pool.submit(process_camera, cam, models)
             futures.append(f)
+            if int(cam.get("monitoring_interval_minutes") or 0) > 0:
+                futures.append(pool.submit(patrol_camera, cam, models))
             time.sleep(0.5)  # Stagger connections
 
         log.info(f"✓ All {len(futures)} camera threads started")

@@ -1,5 +1,6 @@
 """Camera business logic — CRUD, test connection, stream management."""
 
+import json
 import cv2
 import base64
 import time
@@ -28,6 +29,12 @@ async def create_camera(db: AsyncSession, data: CameraCreate) -> Camera:
         ai_detect_person=data.ai_detect_person,
         ai_detect_vehicle=data.ai_detect_vehicle,
         ai_detect_fire=data.ai_detect_fire,
+        ai_processing_fps=data.ai_processing_fps,
+        monitoring_interval_minutes=data.monitoring_interval_minutes,
+        ai_region_json=json.dumps(data.ai_region_points) if data.ai_region_points is not None else None,
+        patrol_region_json=json.dumps(data.patrol_region_points) if data.patrol_region_points is not None else None,
+        display_interval_seconds=data.display_interval_seconds,
+        fallback_seconds=data.fallback_seconds,
         notes=data.notes,
     )
     db.add(camera)
@@ -75,6 +82,12 @@ async def update_camera(db: AsyncSession, camera_id: str, data: CameraUpdate) ->
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
+        if key == "ai_region_points":
+            setattr(camera, "ai_region_json", json.dumps(value) if value is not None else None)
+            continue
+        if key == "patrol_region_points":
+            setattr(camera, "patrol_region_json", json.dumps(value) if value is not None else None)
+            continue
         setattr(camera, key, value)
 
     await db.commit()

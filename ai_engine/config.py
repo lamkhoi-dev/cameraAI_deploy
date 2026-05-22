@@ -49,8 +49,8 @@ MODELS = {
 # ============= VRAM & PERFORMANCE =============
 USE_GPU = True
 GPU_DEVICE = 0
-USE_TENSORRT = False  # Set to True after exporting .engine files
-USE_FP16 = True       # Use FP16 precision for TensorRT (faster but less accurate)
+USE_TENSORRT = False  # Set to True after exporting .engine files (requires: model.export(format='engine'))
+USE_FP16 = True       # Use FP16 precision for TensorRT (faster but ~99% accurate)
 USE_INT8 = False      # Use INT8 quantization (fastest but least accurate)
 
 # Tesla P4 VRAM Budget (8GB total)
@@ -62,18 +62,31 @@ USE_INT8 = False      # Use INT8 quantization (fastest but least accurate)
 # Total: ~3.2GB (plenty of headroom on 8GB card)
 
 # ============= FRAME PROCESSING =============
-SKIP_FRAMES = 3                         # Process every Nth frame (2-3fps at 30fps input)
+SKIP_FRAMES = 5                         # Process every Nth frame (~6fps at 30fps input) - OPTIMIZED
 FRAME_RESIZE_SCALE = 1.0               # Full resolution (1.0 = 100%)
 FRAME_BUFFER_SIZE = 10                 # Maximum frames to buffer
+
+# ============= ADAPTIVE FRAME SKIPPING =============
+ADAPTIVE_FRAME_SKIPPING = True          # Enable GPU-based adaptive frame skipping
+MIN_GPU_UTILIZATION = 60                # If GPU < 60%, reduce SKIP_FRAMES for better accuracy
+MAX_GPU_UTILIZATION = 85                # If GPU > 85%, increase SKIP_FRAMES for stability
 
 # ============= TRACKING CONFIGURATION =============
 TRACK_PERSISTENT_FRAMES = 30           # Keep track for N frames even without detection
 TRACK_MAX_AGE = 60                     # Maximum age of track without detection
 
-# ============= COLOR ANALYSIS =============
+# ============= COLOR ANALYSIS - OPTIMIZED =============
 NUM_COLORS_PERSON = 3                  # Number of dominant colors for person clothing
 NUM_COLORS_VEHICLE = 5                 # Number of dominant colors for vehicle
 COLOR_ANALYSIS_MARGIN = 0.15           # Remove N% from edges to avoid background
+COLOR_MIN_SATURATION = 15              # Minimum saturation to detect colors (improved from 10)
+COLOR_MIN_VALUE = 25                   # Minimum brightness value
+COLOR_MAX_VALUE = 245                  # Maximum brightness value
+COLOR_KMEANS_ITERATIONS = 100          # K-means iterations for convergence (improved from 30)
+COLOR_KMEANS_ATTEMPTS = 20             # K-means attempts (improved from 15)
+COLOR_KMEANS_EPSILON = 0.1             # K-means epsilon threshold (tight convergence, improved from 0.5)
+COLOR_CLAHE_CLIPIMIT = 3.0             # CLAHE clip limit (stronger contrast, improved from 2.0)
+COLOR_CLAHE_TILE_SIZE = (4, 4)         # CLAHE tile size (more detail, improved from (8,8))
 
 # ============= FIRE DETECTION =============
 FIRE_TEMPORAL_THRESHOLD = 3            # Number of consecutive frames to confirm fire

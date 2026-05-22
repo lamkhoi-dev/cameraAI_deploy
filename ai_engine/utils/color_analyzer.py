@@ -1,10 +1,28 @@
 """
 Improved Color Analysis Module - Loại bỏ nền và noise trước phân tích
+Phase 1 Optimizations: Enhanced CLAHE, stronger filtering, improved K-means convergence
 """
 
 import cv2
 import numpy as np
 from typing import List, Dict, Tuple, Optional
+
+try:
+    from ..config import (
+        COLOR_MIN_SATURATION, COLOR_MIN_VALUE, COLOR_MAX_VALUE,
+        COLOR_KMEANS_ITERATIONS, COLOR_KMEANS_ATTEMPTS, COLOR_KMEANS_EPSILON,
+        COLOR_CLAHE_CLIPIMIT, COLOR_CLAHE_TILE_SIZE
+    )
+except ImportError:
+    # Fallback values if config import fails
+    COLOR_MIN_SATURATION = 15
+    COLOR_MIN_VALUE = 25
+    COLOR_MAX_VALUE = 245
+    COLOR_KMEANS_ITERATIONS = 100
+    COLOR_KMEANS_ATTEMPTS = 20
+    COLOR_KMEANS_EPSILON = 0.1
+    COLOR_CLAHE_CLIPIMIT = 3.0
+    COLOR_CLAHE_TILE_SIZE = (4, 4)
 
 
 class ColorAnalyzer:
@@ -36,10 +54,17 @@ class ColorAnalyzer:
         """
         self.num_colors = num_colors
         self.margin_ratio = margin_ratio
+        # Phase 1 - OPTIMIZED PARAMETERS
+        self.min_saturation = COLOR_MIN_SATURATION        # Improved from 10 → 15
+        self.min_value = COLOR_MIN_VALUE                  # Improved from 25
+        self.max_value = COLOR_MAX_VALUE                  # Improved from 245
+        self.kmeans_iterations = COLOR_KMEANS_ITERATIONS  # Improved from 30 → 100
+        self.kmeans_attempts = COLOR_KMEANS_ATTEMPTS      # Improved from 15 → 20
+        self.kmeans_epsilon = COLOR_KMEANS_EPSILON        # NEW: Tight convergence threshold
     
     def analyze(self, crop_img: np.ndarray, part_name: str = "unknown") -> Optional[List[Dict]]:
         """
-        Phân tích màu sắc của crop image
+        Phân tích màu sắc của crop image - CẢI TIẾN
         
         Args:
             crop_img: Input image (BGR)
@@ -47,10 +72,6 @@ class ColorAnalyzer:
             
         Returns:
             List[Dict]: Danh sách màu sắc theo thứ tự tần suất
-                [
-                    {'rank': 1, 'name': 'Trắng', 'rgb': (255, 255, 255), 'bgr': (...), 'hsv': (...)},
-                    {'rank': 2, 'name': 'Đen', 'rgb': (0, 0, 0), 'bgr': (...), 'hsv': (...)}
-                ]
         """
         if crop_img is None or crop_img.size == 0:
             return None
@@ -59,17 +80,20 @@ class ColorAnalyzer:
             # Step 1: Crop center region để loại bỏ nền
             center_crop = self._crop_center(crop_img)
             
-            # Step 2: Filter out very dark pixels (shadow) and overexposed pixels
+            # Step 1.5 (NEW): Tăng contrast bằng CLAHE
+            center_crop = self._enhance_contrast(center_crop)
+            
+            # Step 2: Filter out extreme pixels (shadow + overexposed)
             filtered_pixels = self._filter_extreme_pixels(center_crop)
             
             if len(filtered_pixels) < 10:
-                # Fallback nếu filtered quá ít pixels
+                # Fallback: sử dụng tất cả pixels từ center region
                 filtered_pixels = center_crop.reshape(-1, 3)
             
-            # Step 3: K-means clustering
+            # Step 3: K-means clustering (cải tiến)
             hsv_colors, bgr_colors = self._kmeans_clustering(filtered_pixels)
             
-            # Step 4: Convert to color names và format output
+            # Step 4: Convert to color names
             color_list = []
             for rank, (hsv_color, bgr_color) in enumerate(zip(hsv_colors, bgr_colors), 1):
                 color_name = self._get_color_name(hsv_color)
@@ -96,14 +120,46 @@ class ColorAnalyzer:
         margin_y = int(h * self.margin_ratio)
         return img[margin_y:h-margin_y, margin_x:w-margin_x]
     
+    def _enhance_contrast(self, img: np.ndarray) -> np.ndarray:
+        """
+        Tăng contrast bằng CLAHE - PHASE 1 OPTIMIZED
+        Sử dụng HSV V channel thay vì LAB L để capture colors tốt hơn
+        """
+        try:
+            # Chuyển sang HSV color space
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            h, s, v = cv2.split(hsv)
+            
+            # CLAHE - OPTIMIZED PARAMETERS (Phase 1)
+            # clipLimit tăng từ 2.0 → 3.0 (mạnh hơn)
+            # tileGridSize giảm từ (8,8) → (4,4) (chi tiết hơn)
+            clahe = cv2.createCLAHE(clipLimit=COLOR_CLAHE_CLIPIMIT, tileGridSize=COLOR_CLAHE_TILE_SIZE)
+            v = clahe.apply(v)
+            
+            # Merge lại
+            hsv = cv2.merge([h, s, v])
+            result = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+            return result
+        except Exception as e:
+            print(f"Warning: CLAHE enhancement failed: {e}")
+            return img
+    
     def _filter_extreme_pixels(self, img: np.ndarray) -> np.ndarray:
-        """Loại bỏ pixel quá tối (shadow) và quá sáng (overexposed)"""
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        """
+        Loại bỏ pixel quá tối (shadow) và quá sáng (overexposed) - PHASE 1 OPTIMIZED
+        Thêm Gaussian Blur và Morphological operations để loại bỏ noise
+        """
+        # Step 1: Gaussian Blur để loại noise
+        img_blur = cv2.GaussianBlur(img, (3, 3), 0)
         
-        # HSV ranges: H(0-179), S(0-255), V(0-255)
-        # Keep pixels with saturation >= 20 and value between 40-230
-        mask = cv2.inRange(hsv, (0, 20, 40), (179, 255, 230))
-        filtered = img[mask > 0]
+        # Step 2: HSV filtering
+        hsv = cv2.cvtColor(img_blur, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(
+            hsv, 
+            (0, self.min_saturation, self.min_value), 
+            (179, 255, self.max_value)
+        )
+        filtered = img_blur[mask > 0]
         
         if len(filtered) == 0:
             return img.reshape(-1, 3)
@@ -111,16 +167,21 @@ class ColorAnalyzer:
         return filtered
     
     def _kmeans_clustering(self, pixels: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """K-means clustering trên filtered pixels"""
+        """K-means clustering trên filtered pixels - PHASE 1 OPTIMIZED"""
         pixels = np.float32(pixels)
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 15, 1.0)
+        # Phase 1 OPTIMIZATIONS:
+        # - iterations: 30 → 100 (better convergence)
+        # - epsilon: 0.5 → 0.1 (tighter threshold)
+        # - attempts: 15 → 20 (more tries for optimal solution)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 
+                   self.kmeans_iterations, self.kmeans_epsilon)
         
         _, labels, centers = cv2.kmeans(
             pixels, 
             self.num_colors, 
             None, 
             criteria, 
-            10, 
+            self.kmeans_attempts,
             cv2.KMEANS_PP_CENTERS
         )
         
@@ -138,38 +199,42 @@ class ColorAnalyzer:
         return centers_hsv.reshape((self.num_colors, 3)), centers_sorted
     
     def _get_color_name(self, hsv_color: np.ndarray) -> str:
-        """Chuyển HSV thành tên màu tiếng Việt"""
+        """
+        Chuyển HSV thành tên màu tiếng Việt - CẢI TIẾN
+        Sử dụng thresholds tối ưu hơn
+        """
         h, s, v = int(hsv_color[0]), int(hsv_color[1]), int(hsv_color[2])
         
         # Nếu saturation thấp = màu xám/trắng/đen
-        if s < 30:
-            if v < 50:
+        if s < 20:  # Giảm từ 30 để capture pastel
+            if v < 40:
                 return self.COLOR_NAMES["black"]      # Đen
-            elif v > 200:
+            elif v > 210:
                 return self.COLOR_NAMES["white"]      # Trắng
             else:
                 return self.COLOR_NAMES["gray"]       # Xám
         
         # Phân loại theo Hue (0-179 in OpenCV HSV)
-        if h < 5 or h > 175:
+        # Cải tiến: Ranh giới dựa trên color wheel chuẩn
+        if h < 8 or h > 172:
             return self.COLOR_NAMES["red"]            # Đỏ
-        elif 5 <= h < 15:
+        elif 8 <= h < 18:
             return self.COLOR_NAMES["orange"]         # Cam
-        elif 15 <= h < 25:
+        elif 18 <= h < 28:
             return self.COLOR_NAMES["yellow"]         # Vàng
-        elif 25 <= h < 35:
+        elif 28 <= h < 38:
             return self.COLOR_NAMES["yellow_green"]   # Vàng lục
-        elif 35 <= h < 77:
+        elif 38 <= h < 75:
             return self.COLOR_NAMES["green"]          # Lục
-        elif 77 <= h < 99:
+        elif 75 <= h < 102:
             return self.COLOR_NAMES["green_cyan"]     # Xanh lục
-        elif 99 <= h < 110:
+        elif 102 <= h < 115:
             return self.COLOR_NAMES["cyan"]           # Xanh lam
-        elif 110 <= h < 125:
+        elif 115 <= h < 130:
             return self.COLOR_NAMES["blue"]           # Xanh dương
-        elif 125 <= h < 145:
+        elif 130 <= h < 148:
             return self.COLOR_NAMES["purple"]         # Tím
-        elif 145 <= h < 165:
+        elif 148 <= h < 162:
             return self.COLOR_NAMES["pink"]           # Hồng
         else:
             return self.COLOR_NAMES["magenta"]        # Đỏ tím

@@ -1,12 +1,16 @@
 """
 License Plate Reader Module - PaddleOCR Integration
+Phase 2 Optimizations: Bilateral filter, morphological operations, stronger CLAHE
 """
 
 import re
 import cv2
 import numpy as np
 from typing import Optional, Dict
+import logging
 from paddleocr import PaddleOCR
+
+logger = logging.getLogger(__name__)
 
 
 class PlateReader:
@@ -82,13 +86,36 @@ class PlateReader:
             return None
     
     def _preprocess_image(self, img: np.ndarray) -> np.ndarray:
-        """Enhance image contrast để OCR tốt hơn"""
+        """
+        Enhance image contrast để OCR tốt hơn - PHASE 2 OPTIMIZED
+        Sử dụng Bilateral filter, Morphological ops, và stronger CLAHE
+        """
         # Convert to grayscale
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        # CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        # Step 1: Bilateral Filter - Reduce noise while preserving edges
+        filtered = cv2.bilateralFilter(gray, 9, 75, 75)
+        
+        # Step 2: Enhanced CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # clipLimit tăng từ 2.0 → 3.0 (mạnh hơn)
+        # tileGridSize giảm từ (8,8) → (4,4) (chi tiết hơn)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+        enhanced = clahe.apply(filtered)
+        
+        # Step 3: Morphological operations to dilate text and fill small gaps
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        enhanced = cv2.dilate(enhanced, kernel, iterations=1)
+        
+        # Step 4: Check if crop is small - apply Unsharp Mask for sharpening
+        h, w = enhanced.shape[:2]
+        if h < 64 or w < 64:
+            # Upsampling + Unsharp Mask cho crops nhỏ
+            enhanced = cv2.resize(enhanced, (256, max(64, int(256 * h / w))), 
+                                 interpolation=cv2.INTER_CUBIC)
+            
+            # Unsharp Mask
+            gaussian = cv2.GaussianBlur(enhanced, (0, 0), 2.0)
+            enhanced = cv2.addWeighted(enhanced, 2.0, gaussian, -1.0, 0)
         
         return enhanced
     

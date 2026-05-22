@@ -32,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { RegionEditor } from "@/components/RegionEditor";
 import {
   Plus,
   Search,
@@ -56,11 +57,19 @@ interface BackendCamera {
   brand: string | null;
   model: string | null;
   is_active: boolean;
-  last_connection_status: string;
-  enable_detection: boolean;
+  connection_status: string;
+  ai_detect_person: boolean;
+  ai_detect_vehicle: boolean;
+  ai_detect_fire: boolean;
+  ai_processing_fps?: number;
+  monitoring_interval_minutes?: number;
+  ai_region_points?: number[][] | null;
+  patrol_region_points?: number[][] | null;
   username: string | null;
   password: string | null;
   notes: string | null;
+  display_interval_seconds?: number;
+  fallback_seconds?: number;
 }
 
 // Extract IP from RTSP URL
@@ -90,7 +99,15 @@ export default function CameraManagementPage() {
     location: "",
     stream_url: "",
     brand: "Hikvision",
-    enable_detection: true,
+    ai_detect_person: true,
+    ai_detect_vehicle: true,
+    ai_detect_fire: false,
+    ai_processing_fps: 3,
+    monitoring_interval_minutes: 5,
+    ai_region_points: [] as number[][],
+    patrol_region_points: [] as number[][],
+    display_interval_seconds: 5,
+    fallback_seconds: 5,
   });
 
   const fetchCameras = useCallback(async () => {
@@ -127,7 +144,15 @@ export default function CameraManagementPage() {
       location: "",
       stream_url: "",
       brand: "Hikvision",
-      enable_detection: true,
+      ai_detect_person: true,
+      ai_detect_vehicle: true,
+      ai_detect_fire: false,
+      ai_processing_fps: 3,
+      monitoring_interval_minutes: 5,
+      ai_region_points: [],
+      patrol_region_points: [],
+      display_interval_seconds: 5,
+      fallback_seconds: 5,
     });
     setDialogOpen(true);
   };
@@ -140,7 +165,15 @@ export default function CameraManagementPage() {
       location: cam.location,
       stream_url: cam.stream_url,
       brand: cam.brand || "Hikvision",
-      enable_detection: cam.enable_detection,
+      ai_detect_person: cam.ai_detect_person ?? true,
+      ai_detect_vehicle: cam.ai_detect_vehicle ?? true,
+      ai_detect_fire: cam.ai_detect_fire ?? false,
+      ai_processing_fps: cam.ai_processing_fps ?? 3,
+      monitoring_interval_minutes: cam.monitoring_interval_minutes ?? 5,
+      ai_region_points: cam.ai_region_points ?? [],
+      patrol_region_points: cam.patrol_region_points ?? [],
+      display_interval_seconds: cam.display_interval_seconds ?? 5,
+      fallback_seconds: cam.fallback_seconds ?? 5,
     });
     setDialogOpen(true);
   };
@@ -153,7 +186,15 @@ export default function CameraManagementPage() {
         location: formData.location,
         stream_url: formData.stream_url,
         brand: formData.brand,
-        enable_detection: formData.enable_detection,
+        ai_detect_person: formData.ai_detect_person,
+        ai_detect_vehicle: formData.ai_detect_vehicle,
+        ai_detect_fire: formData.ai_detect_fire,
+        ai_processing_fps: formData.ai_processing_fps,
+        monitoring_interval_minutes: formData.monitoring_interval_minutes,
+        ai_region_points: formData.ai_region_points,
+        patrol_region_points: formData.patrol_region_points,
+        display_interval_seconds: formData.display_interval_seconds,
+        fallback_seconds: formData.fallback_seconds,
       };
 
       if (editingCamera) {
@@ -275,13 +316,100 @@ export default function CameraManagementPage() {
                   placeholder="rtsp://admin:pass@192.168.1.101:554/stream1"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label className="text-zinc-300">FPS xử lý AI</Label>
+                  <Input
+                    type="number"
+                    value={formData.ai_processing_fps}
+                    onChange={(e) => setFormData((s) => ({ ...s, ai_processing_fps: Number(e.target.value) }))}
+                    className="bg-zinc-950 border-zinc-700 text-white"
+                    min={1}
+                    max={30}
+                  />
+                  <p className="text-[11px] text-zinc-500">Ví dụ: 3, 5, 7 FPS cho FaceID / biển số / khói lửa.</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-zinc-300">Chu kỳ giám sát (phút)</Label>
+                  <Input
+                    type="number"
+                    value={formData.monitoring_interval_minutes}
+                    onChange={(e) => setFormData((s) => ({ ...s, monitoring_interval_minutes: Number(e.target.value) }))}
+                    className="bg-zinc-950 border-zinc-700 text-white"
+                    min={1}
+                    max={60}
+                  />
+                  <p className="text-[11px] text-zinc-500">Ví dụ: 5, 10, 15 phút/lần cho người và phương tiện.</p>
+                </div>
+              </div>
+              <div className="border border-zinc-800 rounded-xl p-3 bg-zinc-950/50">
+                <div className="mb-4">
+                  <p className="text-sm font-medium text-zinc-200">Vùng AI xử lý realtime</p>
+                  <p className="text-xs text-zinc-500">Dùng cho FaceID, biển số, khói/lửa.</p>
+                </div>
+                <RegionEditor
+                  value={(formData.ai_region_points || []) as number[][]}
+                  onChange={(next) => setFormData((s) => ({ ...s, ai_region_points: next }))}
+                />
+              </div>
+              <div className="border border-zinc-800 rounded-xl p-3 bg-zinc-950/50">
+                <div className="mb-4">
+                  <p className="text-sm font-medium text-zinc-200">Vùng AI tuần tra</p>
+                  <p className="text-xs text-zinc-500">Dùng cho giám sát định kỳ người và phương tiện.</p>
+                </div>
+                <RegionEditor
+                  value={(formData.patrol_region_points || []) as number[][]}
+                  onChange={(next) => setFormData((s) => ({ ...s, patrol_region_points: next }))}
+                />
+              </div>
               {/* AI Detection Toggle */}
               <div className="border-t border-zinc-800 pt-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-zinc-200">Bật AI Detection</span>
-                  <Switch
-                    checked={formData.enable_detection}
-                    onCheckedChange={(v) => setFormData((s) => ({ ...s, enable_detection: v }))}
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-200">Person</span>
+                      <Switch
+                        checked={formData.ai_detect_person}
+                        onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_detect_person: v }))}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-200">Vehicle</span>
+                      <Switch
+                        checked={formData.ai_detect_vehicle}
+                        onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_detect_vehicle: v }))}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-200">Fire</span>
+                      <Switch
+                        checked={formData.ai_detect_fire}
+                        onCheckedChange={(v) => setFormData((s) => ({ ...s, ai_detect_fire: v }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-4">
+                <div className="flex flex-col gap-2">
+                  <Label className="text-zinc-300">Thời gian hiển thị (giây)</Label>
+                  <Input
+                    type="number"
+                    value={formData.display_interval_seconds}
+                    onChange={(e) => setFormData((s) => ({ ...s, display_interval_seconds: Number(e.target.value) }))}
+                    className="bg-zinc-950 border-zinc-700 text-white"
+                    min={1}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-zinc-300">Thời gian lấp bù (giây)</Label>
+                  <Input
+                    type="number"
+                    value={formData.fallback_seconds}
+                    onChange={(e) => setFormData((s) => ({ ...s, fallback_seconds: Number(e.target.value) }))}
+                    className="bg-zinc-950 border-zinc-700 text-white"
+                    min={1}
                   />
                 </div>
               </div>
@@ -344,7 +472,7 @@ export default function CameraManagementPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {cam.enable_detection ? (
+                    {(cam.ai_detect_person || cam.ai_detect_vehicle) ? (
                       <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[11px]">
                         AI Active
                       </Badge>

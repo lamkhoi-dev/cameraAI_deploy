@@ -5,18 +5,35 @@ from ultralytics import YOLO
 import time
 import torch
 
+# ===== IMPORT CẤU HÌNH TỪ AI ENGINE =====
+try:
+    from ai_engine.config import (
+        CONF_THRESHOLD, KEYPOINT_CONF_THRESHOLD, SKIP_FRAMES, USE_GPU, GPU_DEVICE,
+        NUM_COLORS_PERSON, NUM_COLORS_VEHICLE, USE_OCR, USE_PLATE_DETECTION,
+        FRAME_RESIZE_SCALE
+    )
+    CONFIG_FROM_ENGINE = True
+except ImportError:
+    # Fallback to hardcoded values if config import fails
+    CONFIG_FROM_ENGINE = False
+    CONF_THRESHOLD = 0.5
+    KEYPOINT_CONF_THRESHOLD = 0.3
+    SKIP_FRAMES = 5              # UPDATED: 1 → 5 (Process ~6fps instead of 30fps)
+    USE_GPU = True
+    GPU_DEVICE = 0
+    NUM_COLORS_PERSON = 3
+    NUM_COLORS_VEHICLE = 5
+    USE_OCR = True
+    USE_PLATE_DETECTION = True
+    FRAME_RESIZE_SCALE = 0.5
+
 # ===== CẤU HÌNH TỐI ƯU HÓA =====
-CONF_THRESHOLD = 0.5          # Độ tin cậy tối thiểu (0.5-0.7 tốt nhất)
-KEYPOINT_CONF_THRESHOLD = 0.3 # Độ tin cậy tối thiểu cho keypoints
-RESIZE_SCALE = 0.5            # Resize frame để xử lý nhanh (0.5 = 50% kích thước)
-SKIP_FRAMES = 1               # Xử lý mỗi N frame (1 = mỗi frame, 2 = cách 1 frame)
-USE_GPU = True                # Sử dụng GPU nếu có
-USE_OCR = True                # Sử dụng OCR để đọc biển số
 DISPLAY_OUTPUT = False        # Hiển thị màn hình (Tắt nếu chạy headless/server)
 
-# ===== CẤU HÌNH PHÂN TÍCH MÀU SẮC =====
-NUM_COLORS_PERSON = 3         # Số màu phân tích cho người (3-5)
-NUM_COLORS_VEHICLE = 10       # Số màu phân tích cho xe (5-12) - tăng lên để nhận biết chi tiết hơn
+if CONFIG_FROM_ENGINE:
+    print("✓ Using configuration from ai_engine.config")
+else:
+    print("⚠ Using fallback configuration (ai_engine.config not available)")
 
 # Khởi tạo mô hình với GPU (fallback to CPU nếu không có)
 if USE_GPU and torch.cuda.is_available():

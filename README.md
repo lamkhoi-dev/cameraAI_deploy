@@ -1,70 +1,3 @@
-# 🎥 Camera Tracking AI - Advanced Computer Vision System
-
-**Version 2.2** | **Status**: ✅ **100% COMPLETE - FULLY IMPLEMENTED**
-
----
-
-## 📚 Documentation Guide
-
-**Choose your starting point**:
-
-| Document | Purpose | Read Time |
-|----------|---------|-----------|
-| **[EXECUTIVE_SUMMARY.md](EXECUTIVE_SUMMARY.md)** | High-level system overview | 5 min |
-| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Step-by-step deployment guide | 10 min |
-| **[FACEID_QUICKSTART.md](FACEID_QUICKSTART.md)** | FaceID API reference | 5 min |
-| **[FACEID_IMPLEMENTATION_GUIDE.md](FACEID_IMPLEMENTATION_GUIDE.md)** | Technical implementation details | 30 min |
-| **[REQUIREMENTS_VERIFICATION.md](REQUIREMENTS_VERIFICATION.md)** | Requirements verification report | 10 min |
-| **[SYSTEM_AUDIT_REPORT.md](SYSTEM_AUDIT_REPORT.md)** | Complete system audit | 20 min |
-
----
-
-## ✅ REQUIREMENTS STATUS - ALL COMPLETE!
-
-### 🎯 Person Recognition — 100% Complete ✅
-- ✅ Face Detection (YOLO11s-pose keypoints)
-- ✅ **Face Embedding** (DeepFace VGGFace2 - 512D vectors) **NEW!**
-- ✅ **Face Matching** (Cosine similarity search) **NEW!**
-- ✅ Hair Color Recognition
-- ✅ Shirt Color Recognition  
-- ✅ Pants Color Recognition
-- ✅ Person Tracking with ID
-- ✅ **Age & Gender Detection** (Phase 2) **NEW!**
-
-### 🚗 Vehicle Recognition — 100% Complete ✅
-- ✅ Vehicle Type Classification (car, truck, bus, motorcycle, bicycle)
-- ✅ Vehicle Color Recognition
-- ✅ License Plate Detection
-- ✅ License Plate OCR (Vietnamese support)
-
-### 🔥 Fire Detection — 100% Complete ✅
-- ✅ Fire/Smoke Detection with YOLO model
-- ✅ Temporal Confirmation (reduces false positives 90%)
-- ✅ Real-time Alert System
-
-### 🎊 **PHASE 2 COMPLETE: FaceID Recognition** ✅ **NEW!**
-- ✅ Face embedding extraction (512-dimensional DeepFace)
-- ✅ Known faces database
-- ✅ Face matching/comparison
-- ✅ Multiple face detection per person
-- ✅ Metadata storage (age, gender, emotion)
-
----
-
-## 📋 Overview
-
-High-performance real-time computer vision system optimized for Tesla P4 GPU (8GB VRAM) supporting:
-
-- 🎯 **Person Detection & Tracking** with full attribute recognition (hair, shirt, pants, **FaceID**)
-- 🚗 **Vehicle Detection** with full attribute recognition (type, color, license plate)
-- 🔥 **Fire/Smoke Detection** with temporal confirmation
-- 📷 **Multi-camera Support** (20+ cameras via go2rtc RTSP)
-- 🚀 **Real-time API Integration** (async push to dashboard)
-- ⚡ **TensorRT Acceleration** (3x speedup on Tesla P4)
-
----
-
-## 🚀 Quick Start
 
 ### 1. Installation
 
@@ -81,13 +14,108 @@ pip install -r requirements.txt
 
 Edit `ai_engine/config.py`:
 
+# 🎥 Camera Tracking AI - Hệ thống thị giác máy tính nâng cao
+
+**Phiên bản 2.3** | **Trạng thái**: ✅ Đã cập nhật cho dashboard sự kiện, AI realtime và giám sát tuần tra định kỳ
+
+---
+
+## 📚 Hướng dẫn tài liệu
+
+| Tài liệu | Mục đích | Thời gian đọc |
+|----------|----------|---------------|
+| **[EXECUTIVE_SUMMARY.md](EXECUTIVE_SUMMARY.md)** | Tổng quan hệ thống | 5 phút |
+| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Checklist triển khai | 10 phút |
+| **[FACEID_QUICKSTART.md](FACEID_QUICKSTART.md)** | Tài liệu nhanh cho FaceID | 5 phút |
+| **[FACEID_IMPLEMENTATION_GUIDE.md](FACEID_IMPLEMENTATION_GUIDE.md)** | Chi tiết kỹ thuật FaceID | 30 phút |
+| **[REQUIREMENTS_VERIFICATION.md](REQUIREMENTS_VERIFICATION.md)** | Báo cáo đối chiếu yêu cầu | 10 phút |
+| **[SYSTEM_AUDIT_REPORT.md](SYSTEM_AUDIT_REPORT.md)** | Báo cáo kiểm tra hệ thống | 20 phút |
+
+---
+
+## ✅ Trạng thái chức năng
+
+### 🎯 Nhận diện người
+- ✅ Phát hiện khuôn mặt / người bằng YOLO11s-pose
+- ✅ **Face Embedding** bằng DeepFace VGGFace2 - vector 512 chiều
+- ✅ **Face Matching** bằng cosine similarity
+- ✅ Nhận diện màu tóc / áo / quần
+- ✅ Tracking người theo ID
+- ✅ **Tuổi và giới tính** (Phase 2)
+
+### 🚗 Nhận diện xe
+- ✅ Phân loại xe: car, truck, bus, motorcycle, bicycle
+- ✅ Nhận diện màu xe
+- ✅ Phát hiện biển số
+- ✅ OCR biển số tiếng Việt
+
+### 🔥 Nhận diện khói/lửa
+- ✅ Phát hiện khói/lửa bằng YOLO
+- ✅ Xác nhận theo thời gian để giảm false positive
+- ✅ Hệ thống cảnh báo thời gian thực
+
+### 📷 Dashboard sự kiện & lấp bù
+- ✅ Dashboard ưu tiên ảnh snapshot thay vì livestream liên tục
+- ✅ Chọn ảnh AI có độ tin cậy cao nhất trong cửa sổ hiển thị
+- ✅ Tự chuyển sang ảnh fallback khi không có sự kiện AI đủ lâu
+- ✅ Hiển thị bounding box trên tile dashboard
+
+### 🛰️ Giám sát AI realtime
+- ✅ Cấu hình FPS xử lý theo từng camera
+- ✅ Hỗ trợ ROI đa giác cho xử lý realtime
+- ✅ FaceID được khởi tạo trong AI engine
+
+### 🛡️ Giám sát AI định kỳ
+- ✅ Cấu hình chu kỳ tuần tra theo từng camera
+- ✅ ROI riêng cho chế độ tuần tra
+- ✅ Chụp ảnh định kỳ và sinh cảnh báo khi có người/phương tiện trong vùng cấm
+
+### 🎊 FaceID Phase 2
+- ✅ Trích xuất embedding khuôn mặt 512 chiều
+- ✅ CSDL khuôn mặt đã biết
+- ✅ So khớp khuôn mặt
+- ✅ Nhiều khuôn mặt trong cùng một khung hình
+- ✅ Lưu metadata: tuổi, giới tính, cảm xúc
+
+---
+
+## 📋 Tổng quan
+
+Hệ thống thị giác máy tính thời gian thực tối ưu cho GPU Tesla P4 8GB VRAM, hỗ trợ:
+
+- 🎯 **Nhận diện & tracking người** với đầy đủ thuộc tính (tóc, áo, quần, **FaceID**)
+- 🚗 **Nhận diện xe** với đầy đủ thuộc tính (loại xe, màu xe, biển số)
+- 🔥 **Phát hiện khói/lửa** có xác nhận theo thời gian
+- 📷 **Hỗ trợ nhiều camera** qua go2rtc RTSP
+- 🚀 **Tích hợp API thời gian thực** để đẩy dữ liệu lên dashboard
+- ⚡ **Tăng tốc TensorRT** cho hiệu năng cao hơn
+
+---
+
+## 🚀 Khởi động nhanh
+
+### 1. Cài đặt
+
+```bash
+# Tạo môi trường ảo
+python -m venv venv
+source venv/Scripts/activate  # Windows: venv\Scripts\activate
+
+# Cài thư viện
+pip install -r requirements.txt
+```
+
+### 2. Cấu hình
+
+Chỉnh `ai_engine/config.py`:
+
 ```python
 BACKEND_API_URL = "http://localhost:8000"
 API_KEY = "your-api-key"
-GO2RTC_URL = "localhost"  # or IP address
+GO2RTC_URL = "localhost"  # hoặc IP server
 ```
 
-### 3. Usage
+### 3. Sử dụng
 
 ```python
 from ai_engine import AIEngine
@@ -98,160 +126,158 @@ engine.run(camera_ids=['cam_01', 'cam_02', 'cam_03'])
 
 ---
 
-## 📊 Architecture
+## 📊 Kiến trúc
 
-### Package Structure
+### Cấu trúc package
 ```
-ai_engine/                    # Modular AI system
-├── config.py               # Centralized configuration
-├── engine.py               # Main orchestrator
-├── api_client.py           # Backend API integration
-├── processors/             # Detection modules
+ai_engine/                    # Hệ thống AI dạng module
+├── config.py               # Cấu hình trung tâm
+├── engine.py               # Bộ điều phối chính
+├── api_client.py           # Tích hợp API backend
+├── processors/             # Các module nhận diện
 │   ├── person_processor.py
 │   ├── vehicle_processor.py
 │   └── fire_processor.py
-├── utils/                  # Utilities
-│   ├── color_analyzer.py   # Improved K-means
-│   ├── plate_reader.py     # PaddleOCR integration
-│   └── frame_grabber.py    # go2rtc RTSP streaming
-└── models/                 # Model weights
+├── utils/                  # Tiện ích
+│   ├── color_analyzer.py   # K-means cải tiến
+│   ├── plate_reader.py     # Tích hợp PaddleOCR
+│   └── frame_grabber.py    # Stream RTSP từ go2rtc
+└── models/                 # Trọng số model
     ├── yolo11s-pose.pt
     ├── yolo11s.pt
     ├── yolo11n-fire.pt
     └── yolo11n-plate.pt
 ```
 
-### Performance (Tesla P4 - 8GB VRAM)
+### Hiệu năng (Tesla P4 - 8GB VRAM)
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| VRAM Usage | 3.2GB / 8GB | ✅ Optimal |
-| Processing Speed | ~16ms/frame | ✅ Real-time |
-| Multi-camera Support | 20 cameras | ✅ Scalable |
-| Model Accuracy | YOLOv11s (+10%) | ✅ Improved |
-| Fire False Positives | -90% | ✅ Excellent |
-
----
-
-## 🔄 Version History
-
-### v2.2 (2026-05-04) - FaceID Implementation ✅ **PHASE 2 COMPLETE**
-
-**Major Addition: Full FaceID Recognition System**
-- ✅ InsightFace integration (ArcFace embeddings)
-- ✅ 512-dimensional face embeddings
-- ✅ Face matching with cosine similarity
-- ✅ Known faces database (in-memory + JSON)
-- ✅ Age & gender detection
-- ✅ Emotion analysis
-- ✅ 5 new REST API endpoints
-- ✅ WebSocket support for real-time face data
-- ✅ Complete documentation
-
-**Achievement**: 
-- **14/14 REQUIREMENTS MET** (100% Complete) 🎉
-- System now fully production-ready
-- All detection modules operational
-
-**Files Added**:
-- `ai_engine/processors/face_processor.py` (FaceID detection)
-- `ai_engine/utils/face_matcher.py` (Face matching engine)
-- `FACEID_IMPLEMENTATION.md` (Complete guide)
-- `FACEID_QUICKSTART.md` (Quick setup)
-
-**Files Updated**:
-- `requirements.txt` (InsightFace dependencies)
-- `ai_engine/config.py` (12 FaceID options)
-- `ai_engine/engine.py` (FaceID initialization)
-- `ai_engine/api_client.py` (push_faces endpoint)
-- `models.py` (face embedding schema)
-- `app.py` (5 FaceID REST endpoints)
-- `README.md` (100% completion)
-
-### v2.1 (2026-05-04) - System Cleanup & Audit
-
-**Changes:**
-- ✅ Deleted 16 unnecessary files (outdated docs, deprecated code)
-- ✅ Created comprehensive System Audit Report
-- ✅ Updated README with actual requirements status (92% complete)
-- ✅ Verified all implementations match requirements
-
-### v2.0 (2026-05-03) - Major Refactor
-
-**Improvements:**
-- ✅ Modular package structure (ai_engine/)
-- ✅ YOLOv8n → YOLOv11s (person & vehicle) — +10% accuracy
-- ✅ HSV → YOLO for fire detection — -90% false positives
-- ✅ Manual crop → Intelligent plate detection + PaddleOCR
-- ✅ Raw K-means → Improved color analysis (background filtering)
-- ✅ Local files → Async backend API integration
-- ✅ Single video → Multi-camera go2rtc streaming
-- ✅ TensorRT ready (3x speedup on Tesla P4)
-
-### v1.0 (2026-04-20) - Initial Implementation
-- Basic YOLO detection
-- File-based results storage
-- Single video input
+| Chỉ số | Giá trị | Trạng thái |
+|--------|---------|------------|
+| VRAM sử dụng | 3.2GB / 8GB | ✅ Tối ưu |
+| Tốc độ xử lý | ~16ms/frame | ✅ Realtime |
+| Số camera hỗ trợ | 20 camera | ✅ Mở rộng tốt |
+| Độ chính xác model | YOLOv11s (+10%) | ✅ Cải thiện |
+| False positive khói/lửa | -90% | ✅ Rất tốt |
 
 ---
 
-## 📚 Documentation
+## 🔄 Lịch sử phiên bản
 
-- 📄 [**Configuration Reference**](./ai_engine/config.py) — All configurable options with detailed comments
-- 📊 [**System Audit Report**](./SYSTEM_AUDIT_REPORT.md) — Complete requirements verification
-- 🏗️ [**Architecture Overview**](./ai_engine/) — Modular design with detailed docstrings
-- 🎯 [**FaceID Implementation**](./FACEID_IMPLEMENTATION.md) — Complete FaceID guide & API reference
-- 🚀 [**FaceID Quickstart**](./FACEID_QUICKSTART.md) — 5-minute FaceID setup
+### v2.3 (2026-05-22) - Dashboard sự kiện, AI realtime, tuần tra định kỳ
+
+**Bổ sung lớn: các workflow vận hành mới**
+- ✅ Dashboard snapshot-first với bbox overlay
+- ✅ Fallback frame khi hệ thống không có event AI
+- ✅ ROI tuần tra riêng và giám sát theo chu kỳ
+- ✅ Worker tuần tra định kỳ trong AI engine
+- ✅ Cập nhật schema camera và migration
+
+**File đã cập nhật**:
+- `backend/models/camera.py`
+- `backend/schemas/camera.py`
+- `backend/routers/cameras.py`
+- `run_engine.py`
+- `frontend/src/components/CameraTile.tsx`
+- `frontend/src/pages/CameraManagementPage.tsx`
+- `backend/migrations/001_add_display_fields.sql`
+
+### v2.2 (2026-05-04) - FaceID Implementation ✅ Phase 2 hoàn tất
+
+**Bổ sung chính: hệ thống FaceID đầy đủ**
+- ✅ Tích hợp InsightFace (ArcFace embeddings)
+- ✅ Embedding khuôn mặt 512 chiều
+- ✅ So khớp khuôn mặt bằng cosine similarity
+- ✅ CSDL khuôn mặt đã biết (memory + JSON)
+- ✅ Nhận diện tuổi và giới tính
+- ✅ Phân tích cảm xúc
+- ✅ 5 REST API mới
+- ✅ WebSocket realtime cho dữ liệu khuôn mặt
+- ✅ Tài liệu đầy đủ
+
+**Kết quả**:
+- **14/14 yêu cầu đã đạt**
+- Hệ thống sẵn sàng production
+- Tất cả module nhận diện hoạt động
+
+### v2.1 (2026-05-04) - Dọn dẹp hệ thống & audit
+
+**Thay đổi**:
+- ✅ Xóa 16 file không cần thiết
+- ✅ Tạo System Audit Report
+- ✅ Cập nhật README theo trạng thái thực tế
+- ✅ Đối chiếu lại toàn bộ yêu cầu
+
+### v2.0 (2026-05-03) - Refactor lớn
+
+**Cải tiến**:
+- ✅ Chuyển sang kiến trúc module `ai_engine/`
+- ✅ YOLOv8n → YOLOv11s cho người và xe
+- ✅ HSV → YOLO cho phát hiện khói/lửa
+- ✅ Crop thủ công → phát hiện biển số thông minh + PaddleOCR
+- ✅ K-means thô → phân tích màu cải tiến
+- ✅ File local → API backend bất đồng bộ
+- ✅ Một video → nhiều camera qua go2rtc
+- ✅ Sẵn sàng TensorRT
+
+### v1.0 (2026-04-20) - Phiên bản đầu
+- Phát hiện YOLO cơ bản
+- Lưu kết quả bằng file
+- Chỉ hỗ trợ một video đầu vào
 
 ---
 
-## 🎊 FaceID Phase 2 - COMPLETE!
+## 📚 Tài liệu tham khảo
 
-**Status**: ✅ All 14 requirements met - **100% PRODUCTION READY**
-
-Phase 2 successfully delivered the missing FaceID requirement:
-- ✅ Face detection & embedding extraction (InsightFace/ArcFace)
-- ✅ Face matching with known persons database  
-- ✅ Age, gender, emotion analysis per face
-- ✅ 5 REST API endpoints for face management
-- ✅ WebSocket support for real-time face updates
-- ✅ Complete documentation
-
-For setup and usage, see [FACEID_QUICKSTART.md](./FACEID_QUICKSTART.md).
+- 📄 [**Cấu hình**](./ai_engine/config.py) - Tất cả tùy chọn cấu hình
+- 📊 [**Báo cáo kiểm tra hệ thống**](./SYSTEM_AUDIT_REPORT.md)
+- 🏗️ [**Kiến trúc**](./ai_engine/)
+- 🎯 [**Tài liệu FaceID**](./FACEID_IMPLEMENTATION.md)
+- 🚀 [**Hướng dẫn nhanh FaceID**](./FACEID_QUICKSTART.md)
 
 ---
 
-## 🚀 Future Roadmap
+## 🎊 FaceID Phase 2 - Hoàn tất
 
-### Phase 3: Performance Optimization (Q3 2026)
-\\
-- TensorRT export for 3x speedup on Tesla P4
-- Batch processing for multiple concurrent cameras
-- GPU memory optimization for 20+ streams
-\\
+**Trạng thái**: ✅ Đạt 14/14 yêu cầu - **Sẵn sàng production**
 
-### Phase 4: Advanced Features (Q4 2026)
-\\
-- Heatmaps and crowd density analysis
-- Movement pattern tracking and analytics
-- Anomaly detection system
-- Redis backend for distributed deployments
-\\
+Phase 2 đã hoàn thiện phần FaceID còn thiếu:
+- ✅ Phát hiện khuôn mặt và trích xuất embedding (InsightFace/ArcFace)
+- ✅ So khớp với CSDL khuôn mặt đã biết
+- ✅ Phân tích tuổi, giới tính, cảm xúc
+- ✅ 5 REST API cho quản lý khuôn mặt
+- ✅ WebSocket realtime cho dữ liệu FaceID
+- ✅ Tài liệu đầy đủ
 
-### Phase 5: Mobile & Enterprise Scale (2027)
-\\
-- Mobile app for real-time alerts
-- PostgreSQL pgvector for 1M+ face vectors
-- Kubernetes orchestration for scaling
-- Custom model fine-tuning pipeline
-\\
+Xem thêm: [FACEID_QUICKSTART.md](./FACEID_QUICKSTART.md)
 
 ---
 
-## 📊 API Contracts
+## 🚀 Lộ trình tương lai
 
-### Push Persons
-```
+### Giai đoạn 3: Tối ưu hiệu năng (Q3 2026)
+- Xuất TensorRT để tăng tốc trên Tesla P4
+- Batch processing cho nhiều camera đồng thời
+- Tối ưu bộ nhớ GPU cho 20+ stream
+
+### Giai đoạn 4: Tính năng nâng cao (Q4 2026)
+- Bản đồ nhiệt và mật độ đám đông
+- Theo dõi mẫu di chuyển và phân tích
+- Hệ thống phát hiện bất thường
+- Redis backend cho triển khai phân tán
+
+### Giai đoạn 5: Mobile & Enterprise (2027)
+- Ứng dụng mobile cho cảnh báo realtime
+- PostgreSQL pgvector cho 1M+ vector khuôn mặt
+- Kubernetes để mở rộng
+- Pipeline fine-tuning model riêng
+
+---
+
+## 📊 Hợp đồng API
+
+### Gửi người
+
+```http
 POST /api/ai/persons
 {
   "camera_id": "cam_01",
@@ -260,122 +286,41 @@ POST /api/ai/persons
 }
 ```
 
-### Push Vehicles
-```
-POST /api/ai/vehicles
-{
-  "camera_id": "cam_01",
-  "frame_index": 1235,
-  "vehicles": [...]
-}
-```
-
-### Push Alerts
-```
-POST /api/ai/alerts
-{
-  "camera_id": "cam_01",
-  "alert_type": "fire",
-  "severity": "high",
-  "confidence": 0.87
-}
-```
-
----
-
-## ⚙️ Optimization Tips
-
-### For Tesla P4 (8GB VRAM)
-
-1. **Use TensorRT Export** (3x speedup):
-   ```bash
-   python -c "from ultralytics import YOLO; YOLO('ai_engine/models/yolo11s-pose.pt').export(format='engine', device=0, half=True)"
-   ```
-
-2. **Adjust for speed vs accuracy**:
-   - Increase `SKIP_FRAMES` (2-5) to process fewer frames
-   - Reduce `imgsz` from 640 to 480 for 40% speedup
-   - Enable TensorRT INT8 for 60% speedup (slight accuracy loss)
-
-3. **Monitor performance**:
-   - Check logs: `tail -f logs/ai_engine.log`
-   - Monitor VRAM: `nvidia-smi`
-   - Track FPS: Included in logs
-
----
-
-## 🐳 Docker Deployment
-
-```bash
-# Build image
-docker build -t ai-engine:2.0 .
-
-# Run with GPU
-docker run --gpus all \
-  -e BACKEND_API_URL="http://backend:8000" \
-  -e GO2RTC_URL="go2rtc" \
-  ai-engine:2.0
-```
-
----
-
-## ❓ Troubleshooting
-
-### Out of Memory
-- Enable TensorRT INT8 quantization
-- Increase `SKIP_FRAMES` (skip more frames)
-- Reduce input resolution (`imgsz = 480`)
-
-### Slow Processing
-- Export models to TensorRT (.engine files)
-- Verify GPU is being used: `nvidia-smi`
-- Check if SKIP_FRAMES is too low
-
-### Models not loading
-```bash
-cd ai_engine/models/
-wget https://github.com/ultralytics/assets/releases/download/.../yolo11s-pose.pt
-```
-
----
-
-## 📝 Configuration
-
-Key settings in `ai_engine/config.py`:
+Một số cấu hình chính trong `ai_engine/config.py`:
 
 ```python
-# Detection
-CONF_THRESHOLD = 0.5                    # Minimum confidence
-SKIP_FRAMES = 3                         # Process every 3rd frame
+# Phát hiện
+CONF_THRESHOLD = 0.5                    # Ngưỡng tin cậy tối thiểu
+SKIP_FRAMES = 3                         # Xử lý mỗi khung hình thứ 3
 
-# Color analysis
-NUM_COLORS_PERSON = 3                  # Dominant colors to detect
+# Phân tích màu sắc
+NUM_COLORS_PERSON = 3                  # Số màu chủ đạo cần nhận diện
 
-# Fire detection
-FIRE_TEMPORAL_THRESHOLD = 3            # Consecutive frames to confirm
+# Phát hiện khói/lửa
+FIRE_TEMPORAL_THRESHOLD = 3            # Số khung hình liên tiếp để xác nhận
 
 # Backend
 BACKEND_API_URL = "http://localhost:8000"
-USE_TENSORRT = False                   # Set True after export
+USE_TENSORRT = False                   # Bật sau khi export TensorRT
 ```
 
 ---
 
-## 📦 Requirements
+## 📦 Yêu cầu hệ thống
 
-**Tesla P4 Optimized Stack:**
+**Stack tối ưu cho Tesla P4:**
 - Python 3.9+
-- PyTorch 2.7.0 (last version supporting Pascal architecture)
+- PyTorch 2.7.0 (phiên bản cuối còn hỗ trợ kiến trúc Pascal)
 - CUDA 12.4
 - Ultralytics YOLO 8.3+
 - PaddleOCR 2.9+
 - OpenCV 4.10+
 
-See [requirements.txt](./requirements.txt) for full list.
+Xem [requirements.txt](./requirements.txt) để biết danh sách đầy đủ.
 
 ---
 
-## 🔗 Links
+## 🔗 Liên kết
 
 - 🎯 [Ultralytics YOLO11](https://docs.ultralytics.com/)
 - 📚 [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
@@ -384,12 +329,12 @@ See [requirements.txt](./requirements.txt) for full list.
 
 ---
 
-## 📄 License
+## 📄 Giấy phép
 
-[Your License Here]
+[Điền giấy phép của bạn tại đây]
 
 ---
 
-**Status**: ✅ **92% Complete (Phase 1 MVP Ready)** — Awaiting Phase 2 (FaceID) implementation  
-**Last Updated**: May 4, 2026  
-**System Audit**: See [SYSTEM_AUDIT_REPORT.md](./SYSTEM_AUDIT_REPORT.md) for complete requirements verification
+**Trạng thái**: ✅ Đã cập nhật cho các workflow mới của hệ thống  
+**Cập nhật lần cuối**: 22/05/2026  
+**Kiểm tra hệ thống**: Xem [SYSTEM_AUDIT_REPORT.md](./SYSTEM_AUDIT_REPORT.md) để đối chiếu đầy đủ các yêu cầu

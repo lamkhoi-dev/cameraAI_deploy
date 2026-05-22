@@ -76,3 +76,7 @@ class AIConfigResponse(BaseModel):
     ai_layers: dict
     fps_target: int = 3
     resolution: str = "640x480"
+    ai_processing_fps: int = 3
+    monitoring_interval_minutes: int = 5
+    ai_region_points: list[list[float]] | None = None
+    patrol_region_points: list[list[float]] | None = None

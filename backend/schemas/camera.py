@@ -16,6 +16,12 @@ class CameraCreate(BaseModel):
     ai_detect_person: bool = True
     ai_detect_vehicle: bool = True
     ai_detect_fire: bool = False
+    ai_processing_fps: int = Field(default=3, ge=1, le=30)
+    monitoring_interval_minutes: int = Field(default=5, ge=1, le=60)
+    ai_region_points: list[list[float]] | None = None
+    patrol_region_points: list[list[float]] | None = None
+    display_interval_seconds: int = Field(default=5, ge=1, le=60)
+    fallback_seconds: int = Field(default=5, ge=1, le=60)
     notes: str | None = None
 
 
@@ -31,6 +37,12 @@ class CameraUpdate(BaseModel):
     ai_detect_person: bool | None = None
     ai_detect_vehicle: bool | None = None
     ai_detect_fire: bool | None = None
+    ai_processing_fps: int | None = Field(default=None, ge=1, le=30)
+    monitoring_interval_minutes: int | None = Field(default=None, ge=1, le=60)
+    ai_region_points: list[list[float]] | None = None
+    patrol_region_points: list[list[float]] | None = None
+    display_interval_seconds: int | None = Field(default=None, ge=1, le=60)
+    fallback_seconds: int | None = Field(default=None, ge=1, le=60)
     notes: str | None = None
 
 
@@ -58,6 +70,12 @@ class CameraResponse(BaseModel):
     ai_detect_person: bool
     ai_detect_vehicle: bool
     ai_detect_fire: bool
+    ai_processing_fps: int
+    monitoring_interval_minutes: int
+    ai_region_points: list[list[float]] | None
+    patrol_region_points: list[list[float]] | None
+    display_interval_seconds: int
+    fallback_seconds: int
     notes: str | None
     created_at: datetime | None
     updated_at: datetime | None

@@ -4,8 +4,6 @@ import { LayoutGrid, Rows3, Grid3X3, X } from "lucide-react";
 import api from "@/api/client";
 import { useWebSocket } from "@/hooks/useWebSocket";
 
-const GO2RTC_BASE = import.meta.env.VITE_GO2RTC_BASE || "/go2rtc";
-
 interface BackendCamera {
   id: number;
   camera_id: string;
@@ -17,6 +15,7 @@ interface BackendCamera {
   ai_detect_person: boolean;
   ai_detect_vehicle: boolean;
   ai_detect_fire: boolean;
+  display_interval_seconds?: number;
   resolution: string | null;
   fps: number;
 }
@@ -36,12 +35,22 @@ export default function LiveViewPage() {
   const [cameraEvents, setCameraEvents] = useState<Record<string, { persons: number; vehicles: number }>>({});
   const eventTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  const getEventWindowMs = useCallback(
+    (cameraId: string) => {
+      const camera = cameras.find((item) => item.camera_id === cameraId);
+      const seconds = camera?.display_interval_seconds ?? 5;
+      return Math.max(1000, seconds * 1000);
+    },
+    [cameras],
+  );
+
   useWebSocket({
     url: `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api/ws`,
     onMessage: (data) => {
       const msg = data as { type?: string; payload?: { camera_id?: string; count?: number } };
       if (msg.type === "new_person_detected" && msg.payload?.camera_id) {
         const camId = msg.payload.camera_id;
+        const windowMs = getEventWindowMs(camId);
         setCameraEvents((prev) => ({
           ...prev,
           [camId]: { persons: (prev[camId]?.persons || 0) + (msg.payload!.count || 1), vehicles: prev[camId]?.vehicles || 0 },
@@ -49,10 +58,11 @@ export default function LiveViewPage() {
         clearTimeout(eventTimers.current[camId]);
         eventTimers.current[camId] = setTimeout(() => {
           setCameraEvents((prev) => { const next = { ...prev }; delete next[camId]; return next; });
-        }, 5000);
+        }, windowMs);
       }
       if (msg.type === "new_vehicle_detected" && msg.payload?.camera_id) {
         const camId = msg.payload.camera_id;
+        const windowMs = getEventWindowMs(camId);
         setCameraEvents((prev) => ({
           ...prev,
           [camId]: { persons: prev[camId]?.persons || 0, vehicles: (prev[camId]?.vehicles || 0) + (msg.payload!.count || 1) },
@@ -60,7 +70,7 @@ export default function LiveViewPage() {
         clearTimeout(eventTimers.current[camId]);
         eventTimers.current[camId] = setTimeout(() => {
           setCameraEvents((prev) => { const next = { ...prev }; delete next[camId]; return next; });
-        }, 5000);
+        }, windowMs);
       }
     },
   });
@@ -93,22 +103,26 @@ export default function LiveViewPage() {
     const status = getStatus(expandedCam);
     return (
       <div className="flex gap-6 h-[calc(100vh-7rem)]">
-        {/* Main Video */}
+        {/* Main event image (processed / fallback) */}
         <div className="flex-1 bg-black rounded-lg overflow-hidden relative">
-          <iframe
-            src={`${GO2RTC_BASE}/stream.html?src=${expandedCam.camera_id}&mode=webrtc,mse`}
-            className="w-full h-full border-0"
-            allow="autoplay; fullscreen"
-            title={expandedCam.name}
-          />
+          <div className="w-full h-full">
+            <CameraTile
+              cameraId={expandedCam.camera_id}
+              name={expandedCam.name}
+              status={status}
+              displayIntervalSeconds={expandedCam.display_interval_seconds}
+              resolution={expandedCam.resolution || "1080P / 30FPS"}
+              events={cameraEvents[expandedCam.camera_id]}
+            />
+          </div>
           {/* Overlay info */}
           <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/70 to-transparent z-10 pointer-events-none" />
           <div className="absolute top-3 left-4 z-20 flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${status === "online" ? "bg-emerald-500 animate-pulse" : "bg-zinc-600"}`} />
             <span className="text-sm font-semibold text-white drop-shadow-md">{expandedCam.name}</span>
             {status === "online" && (
-              <span className="bg-red-600/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm animate-pulse ml-2">LIVE</span>
-            )}
+                <span className="bg-amber-600/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ml-2">AI</span>
+              )}
           </div>
           <button
             onClick={() => setExpandedCam(null)}
@@ -151,7 +165,7 @@ export default function LiveViewPage() {
       {/* Layout Switcher */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">
-          Camera trực tiếp ({cameras.length})
+          Dashboard sự kiện ({cameras.length})
         </h2>
         <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
           {(["2x2", "3x3", "4x4"] as Layout[]).map((l) => {
@@ -186,11 +200,6 @@ export default function LiveViewPage() {
               <CameraTile
                 name={cam.name}
                 status={camStatus}
-                streamUrl={
-                  camStatus === "online"
-                    ? `${GO2RTC_BASE}/stream.html?src=${cam.camera_id}&mode=webrtc,mse`
-                    : undefined
-                }
                 resolution={cam.resolution || "1080P / 30FPS"}
                 aiTags={getAiTags(cam)}
                 events={cameraEvents[cam.camera_id]}

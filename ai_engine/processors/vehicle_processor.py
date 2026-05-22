@@ -10,6 +10,7 @@ import logging
 
 from ..utils.color_analyzer import ColorAnalyzer
 from ..utils.plate_reader import PlateReader
+from ..utils.roi_utils import apply_roi_mask
 from ..config import (
     CONF_THRESHOLD, TRACK_CONF_THRESHOLD, NUM_COLORS_VEHICLE,
     CROPPED_DATA_DIR, VEHICLE_CLASSES, USE_PLATE_DETECTION, USE_OCR,
@@ -51,7 +52,7 @@ class VehicleProcessor(BaseProcessor):
             logger.error(f"✗ Failed to load vehicle model: {e}")
             return False
     
-    def process(self, frame: np.ndarray) -> Dict:
+    def process(self, frame: np.ndarray, roi_polygon_points: Optional[List[List[float]]] = None) -> Dict:
         """
         Detect and classify vehicles
         
@@ -78,9 +79,11 @@ class VehicleProcessor(BaseProcessor):
             return {'vehicles': [], 'frame_count': 0}
         
         try:
+            masked_frame = apply_roi_mask(frame, roi_polygon_points)
+
             # Run tracking
             results = self.model.track(
-                frame,
+                masked_frame,
                 persist=True,
                 conf=TRACK_CONF_THRESHOLD,
                 verbose=False,
@@ -153,7 +156,7 @@ class VehicleProcessor(BaseProcessor):
             crop_path = vehicle_dir / f"vehicle_{track_id}.jpg"
             cv2.imwrite(str(crop_path), crop_img)
             
-            return str(crop_path)
+            return crop_path.relative_to(CROPPED_DATA_DIR).as_posix()
         except Exception as e:
             logger.warning(f"⚠️  Failed to save vehicle crop: {e}")
             return ""

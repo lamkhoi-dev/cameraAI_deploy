@@ -154,7 +154,11 @@ async def get_ai_config(camera_id: str, db: AsyncSession = Depends(get_db)):
             "detect_vehicle": camera.ai_detect_vehicle,
             "detect_fire": camera.ai_detect_fire,
         },
-        fps_target=3,
+        fps_target=camera.ai_processing_fps or 3,
+        ai_processing_fps=camera.ai_processing_fps or 3,
+        monitoring_interval_minutes=camera.monitoring_interval_minutes or 5,
+        ai_region_points=camera.to_dict().get("ai_region_points"),
+        patrol_region_points=camera.to_dict().get("patrol_region_points"),
     )
 
 

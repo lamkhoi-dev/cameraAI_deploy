@@ -21,6 +21,22 @@ export const ALL_COLORS = Object.keys(COLOR_MAP);
 
 export function cropUrl(imagePath: string | null | undefined): string | null {
   if (!imagePath) return null;
-  // Convert /app/cropped_data/persons/xxx.jpg → /api/crops/persons/xxx.jpg
-  return imagePath.replace(/^\/app\/cropped_data/, "/api/crops");
+
+  const normalized = imagePath.replace(/\\/g, "/").trim();
+  if (!normalized) return null;
+  if (normalized.startsWith("/api/crops/")) return normalized;
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+
+  const cropMarker = "/cropped_data/";
+  const markerIndex = normalized.lastIndexOf(cropMarker);
+  if (markerIndex >= 0) {
+    return `/api/crops/${normalized.slice(markerIndex + cropMarker.length).replace(/^\/+/, "")}`;
+  }
+
+  if (normalized.startsWith("cropped_data/")) {
+    return `/api/crops/${normalized.slice("cropped_data/".length)}`;
+  }
+
+  if (normalized.startsWith("/")) return null;
+  return `/api/crops/${normalized.replace(/^\/+/, "")}`;
 }

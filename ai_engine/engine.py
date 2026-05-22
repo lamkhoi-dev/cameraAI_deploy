@@ -6,12 +6,23 @@ Coordinates person detection, vehicle detection, fire detection, and API integra
 import logging
 import time
 import asyncio
+import httpx
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 
+import numpy as np
+
+# GPU monitoring (optional)
+try:
+    import pynvml
+    PYNVML_AVAILABLE = True
+except ImportError:
+    PYNVML_AVAILABLE = False
+
 from .config import (
     MODELS, USE_GPU, GPU_DEVICE, SKIP_FRAMES, BACKEND_API_URL, API_KEY,
-    LOG_LEVEL, LOG_FILE, USE_FACE_DETECTION, USE_FACE_RECOGNITION
+    LOG_LEVEL, LOG_FILE, USE_FACE_DETECTION, USE_FACE_RECOGNITION,
+    ADAPTIVE_FRAME_SKIPPING, MIN_GPU_UTILIZATION, MAX_GPU_UTILIZATION
 )
 from .api_client import AIResultClient
 from .processors import PersonProcessor, VehicleProcessor, FireProcessor
@@ -58,13 +69,25 @@ class AIEngine:
         
         # Frame grabbers for each camera
         self.frame_grabbers: Dict[str, FrameGrabber] = {}
+        self.camera_configs: Dict[str, dict] = {}
         
         # Statistics
         self.frame_count = 0
         self.fps = 0
         self.gpu_usage_percent = 0
+        self.current_skip_frames = SKIP_FRAMES  # Dynamic skip frames
+        self.gpu_monitor_initialized = False
         
         self.running = False
+        
+        # Initialize GPU monitoring for adaptive frame skipping
+        if ADAPTIVE_FRAME_SKIPPING and PYNVML_AVAILABLE:
+            try:
+                pynvml.nvmlInit()
+                self.gpu_monitor_initialized = True
+                logger.info("✓ GPU monitoring initialized for adaptive frame skipping")
+            except Exception as e:
+                logger.warning(f"⚠️  GPU monitoring initialization failed: {e}")
     
     def initialize(self) -> bool:
         """Initialize AI engine"""
@@ -111,7 +134,17 @@ class AIEngine:
             logger.error(f"✗ AI Engine initialization failed: {e}")
             return False
     
-    def register_camera(self, camera_id: str, go2rtc_url: str = "localhost") -> bool:
+    def _fetch_camera_config(self, camera_id: str) -> dict:
+        """Fetch per-camera AI config from the backend."""
+        try:
+            response = httpx.get(f"{self.backend_url}/api/ai/config/{camera_id}", timeout=10)
+            response.raise_for_status()
+            return response.json() or {}
+        except Exception as e:
+            logger.debug(f"⚠️  Camera config fetch failed for {camera_id}: {e}")
+            return {}
+
+    def register_camera(self, camera_id: str, go2rtc_url: str = "localhost", camera_config: Optional[dict] = None) -> bool:
         """
         Register camera for frame streaming
         
@@ -125,7 +158,15 @@ class AIEngine:
         try:
             logger.info(f"📷 Registering camera: {camera_id}")
             
-            frame_grabber = FrameGrabber(camera_id, go2rtc_url)
+            resolved_config = camera_config or self._fetch_camera_config(camera_id)
+            self.camera_configs[camera_id] = resolved_config
+
+            frame_grabber = FrameGrabber(
+                camera_id,
+                go2rtc_url,
+                camera_config=resolved_config,
+                processing_fps=resolved_config.get("ai_processing_fps") or resolved_config.get("fps_target")
+            )
             if frame_grabber.start():
                 self.frame_grabbers[camera_id] = frame_grabber
                 logger.info(f"✓ Camera registered: {camera_id}")
@@ -138,7 +179,65 @@ class AIEngine:
             logger.error(f"✗ Camera registration failed: {e}")
             return False
     
-    def process_frame(self, frame, camera_id: str, frame_idx: int) -> Dict:
+    def _get_gpu_utilization(self) -> float:
+        """
+        Get current GPU utilization percentage
+        Returns: GPU utilization (0-100), or -1 if unavailable
+        """
+        if not ADAPTIVE_FRAME_SKIPPING or not self.gpu_monitor_initialized:
+            return -1
+        
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(GPU_DEVICE)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            return float(util.gpu)
+        except Exception as e:
+            logger.warning(f"GPU utilization query failed: {e}")
+            return -1
+    
+    def _get_adaptive_skip_frames(self) -> int:
+        """
+        Dynamically adjust SKIP_FRAMES based on GPU utilization
+        - Low GPU util (< 60%): Reduce skip frames (process more) for better accuracy
+        - High GPU util (> 85%): Increase skip frames (process less) for stability
+        - Normal (60-85%): Use default SKIP_FRAMES
+        
+        Returns: Adjusted skip frames value
+        """
+        if not ADAPTIVE_FRAME_SKIPPING:
+            return SKIP_FRAMES
+        
+        gpu_util = self._get_gpu_utilization()
+        
+        if gpu_util < 0:  # GPU monitoring not available
+            return SKIP_FRAMES
+        
+        self.gpu_usage_percent = gpu_util
+        
+        if gpu_util < MIN_GPU_UTILIZATION:
+            # Low GPU utilization - can process more frames
+            adjusted = max(3, SKIP_FRAMES - 2)  # Reduce skip frames, but minimum 3
+            if adjusted != self.current_skip_frames:
+                logger.debug(f"GPU util {gpu_util:.1f}% < {MIN_GPU_UTILIZATION}% - Processing more frames (skip={adjusted})")
+                self.current_skip_frames = adjusted
+            return adjusted
+        
+        elif gpu_util > MAX_GPU_UTILIZATION:
+            # High GPU utilization - process fewer frames
+            adjusted = min(8, SKIP_FRAMES + 2)  # Increase skip frames, but maximum 8
+            if adjusted != self.current_skip_frames:
+                logger.debug(f"GPU util {gpu_util:.1f}% > {MAX_GPU_UTILIZATION}% - Processing fewer frames (skip={adjusted})")
+                self.current_skip_frames = adjusted
+            return adjusted
+        
+        else:
+            # Normal GPU utilization
+            if self.current_skip_frames != SKIP_FRAMES:
+                logger.debug(f"GPU util {gpu_util:.1f}% - Back to default (skip={SKIP_FRAMES})")
+                self.current_skip_frames = SKIP_FRAMES
+            return SKIP_FRAMES
+    
+    def process_frame(self, frame: np.ndarray, camera_id: str, frame_idx: int) -> Dict:
         """
         Process single frame through all processors
         
@@ -160,6 +259,8 @@ class AIEngine:
         }
         
         try:
+            roi_polygon_points = self.camera_configs.get(camera_id, {}).get("ai_region_points") or []
+
             # Person detection
             if self.person_processor:
                 person_results = self.person_processor.process(frame)
@@ -167,12 +268,12 @@ class AIEngine:
             
             # Vehicle detection
             if self.vehicle_processor:
-                vehicle_results = self.vehicle_processor.process(frame)
+                vehicle_results = self.vehicle_processor.process(frame, roi_polygon_points)
                 results['vehicles'] = vehicle_results.get('vehicles', [])
             
             # Fire detection
             if self.fire_processor:
-                fire_results = self.fire_processor.process(frame, frame_idx)
+                fire_results = self.fire_processor.process(frame, frame_idx, roi_polygon_points)
                 if fire_results.get('confirmed'):
                     results['alerts'].extend(fire_results.get('alerts', []))
             
@@ -244,8 +345,11 @@ class AIEngine:
                 
                 frame_skip_counter += 1
                 
-                # Process every Nth frame (frame skipping)
-                if frame_skip_counter >= SKIP_FRAMES:
+                # Get adaptive skip frames based on GPU utilization
+                skip_frames = self._get_adaptive_skip_frames()
+                
+                # Process every Nth frame (frame skipping with adaptive adjustment)
+                if frame_skip_counter >= skip_frames:
                     frame_skip_counter = 0
                     
                     # Process frame

@@ -1,5 +1,6 @@
-"""Camera ORM model with per-camera AI layer toggles."""
+"""Camera ORM model with per-camera AI layer toggles and AI configuration."""
 
+import json
 from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -37,6 +38,16 @@ class Camera(Base):
     ai_detect_vehicle: Mapped[bool] = mapped_column(Boolean, default=True)
     ai_detect_fire: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # AI processing configuration
+    ai_processing_fps: Mapped[int] = mapped_column(Integer, default=3)
+    monitoring_interval_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    ai_region_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    patrol_region_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Display configuration for dashboard (seconds)
+    display_interval_seconds: Mapped[int] = mapped_column(Integer, default=5)
+    fallback_seconds: Mapped[int] = mapped_column(Integer, default=5)
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -47,6 +58,11 @@ class Camera(Base):
     )
 
     def to_dict(self) -> dict:
+        try:
+            ai_region_points = json.loads(self.ai_region_json) if self.ai_region_json else None
+        except Exception:
+            ai_region_points = None
+
         return {
             "id": self.id,
             "camera_id": self.camera_id,
@@ -64,6 +80,12 @@ class Camera(Base):
             "ai_detect_person": self.ai_detect_person,
             "ai_detect_vehicle": self.ai_detect_vehicle,
             "ai_detect_fire": self.ai_detect_fire,
+            "ai_processing_fps": self.ai_processing_fps,
+            "monitoring_interval_minutes": self.monitoring_interval_minutes,
+            "ai_region_points": ai_region_points,
+            "patrol_region_points": json.loads(self.patrol_region_json) if self.patrol_region_json else None,
+            "display_interval_seconds": self.display_interval_seconds,
+            "fallback_seconds": self.fallback_seconds,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

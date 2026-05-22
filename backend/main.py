@@ -14,6 +14,7 @@ from config import get_settings
 from database import init_db, close_db, async_session
 from models.user import User
 from services.ws_manager import ws_manager
+from services.snapshot_service import snapshot_service
 
 from routers import auth, cameras, ai_ingest, ai_adapter, history
 
@@ -58,9 +59,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Camera Tracking AI Backend...")
     await init_db()
     await seed_default_users()
+    # Start background snapshot service
+    await snapshot_service.start()
     logger.info("Backend ready.")
     yield
     logger.info("Shutting down...")
+    # Stop background snapshot service
+    await snapshot_service.stop()
     await close_db()
 
 

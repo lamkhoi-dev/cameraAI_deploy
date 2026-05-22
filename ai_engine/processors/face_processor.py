@@ -14,6 +14,7 @@ from ..config import (
     FACE_EMBEDDING_DIM, FACE_EMBEDDING_MODEL, FACE_MIN_FACE_SIZE,
     USE_GPU, GPU_DEVICE, CROPPED_DATA_DIR
 )
+from ..utils.roi_utils import apply_roi_mask
 from .base_processor import BaseProcessor
 
 
@@ -51,7 +52,7 @@ class FaceProcessor(BaseProcessor):
             logger.error(f"✗ Failed to load face processor: {e}")
             return False
     
-    def process(self, frame: np.ndarray, track_id: int) -> Dict:
+    def process(self, frame: np.ndarray, track_id: int, roi_polygon_points: Optional[List[List[float]]] = None) -> Dict:
         """
         Detect faces and extract embeddings
         
@@ -84,8 +85,10 @@ class FaceProcessor(BaseProcessor):
         try:
             from deepface import DeepFace
             
+            masked_frame = apply_roi_mask(frame, roi_polygon_points)
+
             # Convert BGR to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2RGB)
             
             # Detect faces
             try:
@@ -308,7 +311,7 @@ class FaceProcessor(BaseProcessor):
             crop_path = person_dir / f"face_{face_idx}_{file_num}.jpg"
             cv2.imwrite(str(crop_path), crop_img)
             
-            return str(crop_path)
+            return crop_path.relative_to(CROPPED_DATA_DIR).as_posix()
             
         except Exception as e:
             logger.warning(f"⚠️  Failed to save face crop: {e}")
