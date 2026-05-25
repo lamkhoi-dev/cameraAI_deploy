@@ -1,7 +1,8 @@
 """Camera request/response schemas."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
+import json
 
 
 class CameraCreate(BaseModel):
@@ -70,17 +71,41 @@ class CameraResponse(BaseModel):
     ai_detect_person: bool
     ai_detect_vehicle: bool
     ai_detect_fire: bool
-    ai_processing_fps: int
-    monitoring_interval_minutes: int
-    ai_region_points: list[list[float]] | None
-    patrol_region_points: list[list[float]] | None
-    display_interval_seconds: int
-    fallback_seconds: int
+    ai_processing_fps: int = 3
+    monitoring_interval_minutes: int = 5
+    ai_region_points: list[list[float]] | None = None
+    patrol_region_points: list[list[float]] | None = None
+    display_interval_seconds: int = 5
+    fallback_seconds: int = 5
     notes: str | None
     created_at: datetime | None
     updated_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_region_json(cls, data):
+        """Convert ORM ai_region_json/patrol_region_json strings to lists."""
+        if hasattr(data, "__dict__"):
+            # ORM object — read attributes
+            obj = data
+            result = {}
+            for field_name in cls.model_fields:
+                result[field_name] = getattr(obj, field_name, None)
+            # Parse JSON strings into lists
+            raw_ai = getattr(obj, "ai_region_json", None)
+            raw_patrol = getattr(obj, "patrol_region_json", None)
+            try:
+                result["ai_region_points"] = json.loads(raw_ai) if raw_ai else None
+            except Exception:
+                result["ai_region_points"] = None
+            try:
+                result["patrol_region_points"] = json.loads(raw_patrol) if raw_patrol else None
+            except Exception:
+                result["patrol_region_points"] = None
+            return result
+        return data
 
 
 class CameraTestResult(BaseModel):
