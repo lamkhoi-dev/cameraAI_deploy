@@ -350,6 +350,7 @@ export default function CameraManagementPage() {
                 <RegionEditor
                   value={(formData.ai_region_points || []) as number[][]}
                   onChange={(next) => setFormData((s) => ({ ...s, ai_region_points: next }))}
+                  cameraId={editingCamera ? formData.camera_id : undefined}
                 />
               </div>
               <div className="border border-zinc-800 rounded-xl p-3 bg-zinc-950/50">
@@ -360,6 +361,7 @@ export default function CameraManagementPage() {
                 <RegionEditor
                   value={(formData.patrol_region_points || []) as number[][]}
                   onChange={(next) => setFormData((s) => ({ ...s, patrol_region_points: next }))}
+                  cameraId={editingCamera ? formData.camera_id : undefined}
                 />
               </div>
               {/* AI Detection Toggle */}

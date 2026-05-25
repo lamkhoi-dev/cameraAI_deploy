@@ -344,7 +344,9 @@ def push_heartbeat(camera_ids: list):
         pass
 
 def patrol_camera(camera: dict, models: dict):
-    """Run periodic patrol monitoring for a camera."""
+    """Run periodic patrol monitoring for a camera.
+    Captures a single frame, detects persons/vehicles, saves to DB history AND pushes alerts.
+    """
     cam_id = camera.get("camera_id", "unknown")
     rtsp_url = f"rtsp://{GO2RTC_HOST}:{GO2RTC_RTSP_PORT}/{cam_id}"
     patrol_frame_index = 0
@@ -360,8 +362,51 @@ def patrol_camera(camera: dict, models: dict):
         if frame is not None:
             violations = _detect_patrol_violations(frame, cam_id, patrol_frame_index, models, roi_points)
             if violations:
+                # Save full frame for this patrol capture
+                full_frame_path = _save_full_frame(frame, cam_id, patrol_frame_index)
+
+                # Separate persons and vehicles for DB history
+                persons_for_db = []
+                vehicles_for_db = []
+                for v in violations:
+                    bbox = v.get("bbox", [])
+                    crop = _crop_region(frame, bbox) if bbox else None
+                    crop_path = ""
+                    if crop is not None:
+                        kind = v.get("kind", "person")
+                        crop_path = _save_crop(crop, f"{kind}s", f"{cam_id}_patrol_{kind}_{patrol_frame_index}")
+
+                    if v.get("kind") == "person":
+                        attrs = _analyze_person_attributes(frame, bbox) if bbox else {}
+                        if full_frame_path:
+                            attrs["full_frame_path"] = full_frame_path
+                        persons_for_db.append({
+                            "track_id": v.get("track_id", -1),
+                            "confidence": v.get("confidence", 0),
+                            "bbox": bbox,
+                            "attributes": attrs,
+                            "image_path": crop_path,
+                        })
+                    elif v.get("kind") == "vehicle":
+                        v_attrs = {"full_frame_path": full_frame_path} if full_frame_path else None
+                        vehicles_for_db.append({
+                            "track_id": -1,
+                            "vehicle_type": v.get("vehicle_type", "car"),
+                            "confidence": v.get("confidence", 0),
+                            "bbox": bbox,
+                            "license_plate": None,
+                            "colors": [],
+                            "image_path": crop_path,
+                            "attributes": v_attrs,
+                        })
+
+                # Save to DB history (persons + vehicles tables)
+                if persons_for_db or vehicles_for_db:
+                    push_results(cam_id, patrol_frame_index, persons_for_db, vehicles_for_db)
+
+                # Push alert
                 best = max(violations, key=lambda item: item.get("confidence", 0.0))
-                description = f"{len(violations)} vi pham trong vung tuan tra"
+                description = f"{len(violations)} phát hiện trong vùng tuần tra"
                 snapshot = _encode_frame_base64(frame)
                 push_alert(
                     cam_id,
@@ -373,7 +418,7 @@ def patrol_camera(camera: dict, models: dict):
                     snapshot,
                     description,
                 )
-                log.info(f"[{cam_id}] Patrol violation: {description} (conf={best.get('confidence', 0.0):.3f})")
+                log.info(f"[{cam_id}] 🛰️ Patrol: {description} ({len(persons_for_db)}P/{len(vehicles_for_db)}V, conf={best.get('confidence', 0.0):.3f})")
         else:
             log.debug(f"[{cam_id}] Patrol capture failed")
 

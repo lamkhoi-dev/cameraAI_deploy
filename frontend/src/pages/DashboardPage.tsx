@@ -199,7 +199,7 @@ export default function DashboardPage() {
 
         {/* Camera Grid Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Luồng Live</h2>
+          <h2 className="text-lg font-semibold text-white">Giám sát Camera</h2>
           <div className="flex items-center gap-3">
             <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
               <button
