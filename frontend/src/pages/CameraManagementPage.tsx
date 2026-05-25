@@ -348,7 +348,7 @@ export default function CameraManagementPage() {
                   <p className="text-xs text-zinc-500">Dùng cho FaceID, biển số, khói/lửa.</p>
                 </div>
                 <RegionEditor
-                  value={(formData.ai_region_points || []) as number[][]}
+                  value={(formData.ai_region_points || []) as [number, number][]}
                   onChange={(next) => setFormData((s) => ({ ...s, ai_region_points: next }))}
                   cameraId={editingCamera ? formData.camera_id : undefined}
                 />
@@ -359,7 +359,7 @@ export default function CameraManagementPage() {
                   <p className="text-xs text-zinc-500">Dùng cho giám sát định kỳ người và phương tiện.</p>
                 </div>
                 <RegionEditor
-                  value={(formData.patrol_region_points || []) as number[][]}
+                  value={(formData.patrol_region_points || []) as [number, number][]}
                   onChange={(next) => setFormData((s) => ({ ...s, patrol_region_points: next }))}
                   cameraId={editingCamera ? formData.camera_id : undefined}
                 />
