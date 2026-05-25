@@ -198,8 +198,10 @@ export default function LiveViewPage() {
               className="cursor-pointer"
             >
               <CameraTile
+                cameraId={cam.camera_id}
                 name={cam.name}
                 status={camStatus}
+                displayIntervalSeconds={cam.display_interval_seconds}
                 resolution={cam.resolution || "1080P / 30FPS"}
                 aiTags={getAiTags(cam)}
                 events={cameraEvents[cam.camera_id]}
